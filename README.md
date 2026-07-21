@@ -17,7 +17,9 @@ On macOS, build a normal app bundle with:
 open target/debug/Magi.app
 ```
 
-The reader supports selectable text, persistent font size, pausing automatic clipboard updates, and manual **Paste now** capture. Clipboard text stays on the computer. While automatic updates are enabled, unrelated text copies will also replace the reader; pause updates before copying sensitive text.
+The reader supports selectable text, persistent font size, pausing automatic clipboard updates, and manual **Paste now** capture. Its menu-bar icon can show or hide the reader, pause updates, or quit; closing the window hides it instead of stopping Magi. The global show/hide shortcut defaults to **Option-M** and can be changed in the reader.
+
+Clipboard text stays on the computer. While automatic updates are enabled, unrelated text copies will also replace the reader; pause updates before copying sensitive text.
 
 Run Rust tests with `cargo test`. See [MIGRATION.md](MIGRATION.md) for the architecture, permission boundary, migration stages, and manual validation checklist.
 

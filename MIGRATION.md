@@ -44,6 +44,7 @@ The current Swift application remains isolated from the Rust app. This avoids a 
 
 3. **Platform packaging and validation**
    - A local unsigned macOS `.app` packaging script is implemented.
+   - Menu-bar lifecycle, close-to-hide behavior, and a configurable global show/hide shortcut are implemented.
    - Local tests, strict linting, and a macOS UI smoke test pass.
    - Add a macOS, Windows, and Linux CI matrix when the repository token permits workflow updates.
    - Signed installers and physical Windows/Linux smoke tests remain release work, not part of the source migration.

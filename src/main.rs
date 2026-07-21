@@ -8,6 +8,10 @@ use magi::{
 };
 use serde::{Deserialize, Serialize};
 
+mod desktop;
+
+use desktop::{DesktopAction, DesktopIntegration, ShortcutChoice};
+
 const SETTINGS_KEY: &str = "magi_settings";
 const POLL_INTERVAL: Duration = Duration::from_millis(350);
 
@@ -15,11 +19,15 @@ const POLL_INTERVAL: Duration = Duration::from_millis(350);
 #[serde(default)]
 struct Settings {
     font_size: f32,
+    shortcut: ShortcutChoice,
 }
 
 impl Default for Settings {
     fn default() -> Self {
-        Self { font_size: 24.0 }
+        Self {
+            font_size: 24.0,
+            shortcut: ShortcutChoice::default(),
+        }
     }
 }
 
@@ -31,6 +39,9 @@ struct MagiApp {
     was_focused: bool,
     prose_font: FontFamily,
     settings: Settings,
+    desktop: DesktopIntegration,
+    window_visible: bool,
+    quitting: bool,
 }
 
 impl MagiApp {
@@ -50,10 +61,12 @@ impl MagiApp {
         let clipboard_error = clipboard
             .is_none()
             .then(|| "Clipboard access is unavailable on this system.".to_owned());
-        let settings = cc
+        let settings: Settings = cc
             .storage
             .and_then(|storage| eframe::get_value(storage, SETTINGS_KEY))
             .unwrap_or_default();
+
+        let desktop = DesktopIntegration::new(&cc.egui_ctx, settings.shortcut);
 
         Self {
             reader: ReaderState::new(initial_clipboard),
@@ -63,6 +76,39 @@ impl MagiApp {
             was_focused: true,
             prose_font,
             settings,
+            desktop,
+            window_visible: true,
+            quitting: false,
+        }
+    }
+
+    fn handle_desktop_actions(&mut self, ctx: &egui::Context) {
+        while let Some(action) = self.desktop.next_action() {
+            match action {
+                DesktopAction::ToggleWindow => {
+                    self.window_visible = !self.window_visible;
+                    ctx.send_viewport_cmd(egui::ViewportCommand::Visible(self.window_visible));
+                    if self.window_visible {
+                        ctx.send_viewport_cmd(egui::ViewportCommand::Focus);
+                    }
+                    self.desktop.set_window_visible(self.window_visible);
+                }
+                DesktopAction::ToggleListening => {
+                    self.reader.set_listening(!self.reader.is_listening());
+                    self.desktop.set_listening(self.reader.is_listening());
+                }
+                DesktopAction::Quit => {
+                    self.quitting = true;
+                    ctx.send_viewport_cmd(egui::ViewportCommand::Close);
+                }
+            }
+        }
+
+        if ctx.input(|input| input.viewport().close_requested()) && !self.quitting {
+            ctx.send_viewport_cmd(egui::ViewportCommand::CancelClose);
+            ctx.send_viewport_cmd(egui::ViewportCommand::Visible(false));
+            self.window_visible = false;
+            self.desktop.set_window_visible(false);
         }
     }
 
@@ -134,6 +180,7 @@ impl MagiApp {
             let mut listening = self.reader.is_listening();
             if ui.checkbox(&mut listening, "Auto-update").changed() {
                 self.reader.set_listening(listening);
+                self.desktop.set_listening(listening);
             }
             if ui.button("Paste now").clicked() {
                 self.read_clipboard(true);
@@ -142,6 +189,25 @@ impl MagiApp {
                 RichText::new("Copy in Codex or Claude; no Accessibility permission needed.")
                     .weak(),
             );
+        });
+
+        ui.horizontal(|ui| {
+            ui.label("Show/hide shortcut");
+            let previous = self.settings.shortcut;
+            egui::ComboBox::from_id_salt("global-shortcut")
+                .selected_text(self.settings.shortcut.label())
+                .show_ui(ui, |ui| {
+                    for shortcut in ShortcutChoice::ALL {
+                        ui.selectable_value(
+                            &mut self.settings.shortcut,
+                            shortcut,
+                            shortcut.label(),
+                        );
+                    }
+                });
+            if self.settings.shortcut != previous {
+                self.desktop.set_shortcut(self.settings.shortcut);
+            }
         });
     }
 
@@ -245,6 +311,7 @@ fn readable_font_paths() -> &'static [&'static str] {
 
 impl eframe::App for MagiApp {
     fn ui(&mut self, ui: &mut egui::Ui, _frame: &mut eframe::Frame) {
+        self.handle_desktop_actions(ui.ctx());
         self.poll_clipboard(ui.ctx());
 
         egui::CentralPanel::default()
@@ -259,6 +326,11 @@ impl eframe::App for MagiApp {
 
                 if let Some(error) = &self.clipboard_error {
                     ui.colored_label(Color32::from_rgb(225, 95, 95), error);
+                    ui.separator();
+                }
+
+                if let Some(error) = self.desktop.error() {
+                    ui.colored_label(Color32::from_rgb(225, 155, 75), error);
                     ui.separator();
                 }
 
