@@ -1,0 +1,19 @@
+[package]
+name = "magi"
+version = "0.1.0"
+edition = "2024"
+description = "A cross-platform reading lens for AI coding app output"
+license = "MIT"
+
+[dependencies]
+arboard = { version = "3.6.1", default-features = false }
+eframe = { version = "0.35.0", default-features = false, features = [
+    "accesskit",
+    "default_fonts",
+    "glow",
+    "persistence",
+    "wayland",
+    "x11",
+] }
+pulldown-cmark = "0.13.4"
+serde = { version = "1.0", features = ["derive"] }
