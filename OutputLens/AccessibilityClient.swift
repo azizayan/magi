@@ -152,9 +152,7 @@ final class AccessibilityClient {
         var names: [String] = []
         var budget = remainingNodes - 1
         for child in children where budget > 0 {
-            for name in collectActionNames(from: child, depth: depth + 1, remainingNodes: budget) where !names.contains(name) {
-                names.append(name)
-            }
+            names.append(contentsOf: collectActionNames(from: child, depth: depth + 1, remainingNodes: budget))
             budget -= 1
         }
         return names

@@ -36,7 +36,7 @@ final class ResponseHeuristicsTests: XCTestCase {
     }
 
     func testDoesNotSelectWholeChatWhenOnlyConversationAncestorHasResponseControls() {
-        let conversationActions = ["Copy message"] + (1...15).map { "Earlier response action \($0)" }
+        let conversationActions = Array(repeating: "Copy message", count: 16)
         let candidates = [
             candidate(depth: 0, text: String(repeating: "clicked text ", count: 20)),
             candidate(depth: 1, text: String(repeating: "last response ", count: 24)),
