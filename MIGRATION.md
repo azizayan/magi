@@ -42,9 +42,10 @@ The current Swift application remains isolated from the Rust app. This avoids a 
    - Prose uses an installed bold system font on macOS, Windows, and Linux, with a bundled fallback.
    - Rendered text remains selectable and code indentation is preserved.
 
-3. **Platform packaging and validation — implemented for development**
+3. **Platform packaging and validation**
    - A local unsigned macOS `.app` packaging script is implemented.
-   - CI compiles, tests, and lints the Rust app on macOS, Windows, and Linux.
+   - Local tests, strict linting, and a macOS UI smoke test pass.
+   - Add a macOS, Windows, and Linux CI matrix when the repository token permits workflow updates.
    - Signed installers and physical Windows/Linux smoke tests remain release work, not part of the source migration.
 
 4. **Optional native adapters**

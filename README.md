@@ -21,8 +21,6 @@ The reader supports selectable text, persistent font size, pausing automatic cli
 
 Run Rust tests with `cargo test`. See [MIGRATION.md](MIGRATION.md) for the architecture, permission boundary, migration stages, and manual validation checklist.
 
-Every push is compiled, tested, and linted on macOS, Windows, and Linux in GitHub Actions.
-
 ## Native macOS prototype
 
 The Swift prototype provides the enhanced Option-click workflow. It still needs macOS Accessibility permission because it reads response elements from another application; implementing the adapter in Rust cannot remove that operating-system requirement.
