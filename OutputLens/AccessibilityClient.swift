@@ -43,12 +43,17 @@ enum AccessibilityClientError: LocalizedError {
 }
 
 final class AccessibilityClient {
+    private let chromiumBundleIdentifiers: Set<String> = [
+        "com.openai.codex",
+        "com.anthropic.claudefordesktop",
+    ]
     private let terminalBundleIdentifiers: Set<String> = [
         "com.apple.Terminal",
         "com.googlecode.iterm2",
     ]
     private let systemWideElement = AXUIElementCreateSystemWide()
     private let logger = Logger(subsystem: "com.azizemreayan.OutputLens", category: "TargetSelection")
+    private var preparedApplicationPIDs: Set<pid_t> = []
 
     /// Elements backing the most recent snapshot, keyed by node ID.
     private var elementsByNodeID: [Int: AXUIElement] = [:]
@@ -60,18 +65,44 @@ final class AccessibilityClient {
         var hitElement: AXUIElement?
         guard AXUIElementCopyElementAtPosition(systemWideElement, Float(point.x), Float(point.y), &hitElement) == .success,
               let hitElement else {
+            logger.error("System hit test failed at \(point.x, privacy: .public),\(point.y, privacy: .public)")
             throw AccessibilityClientError.noElement
         }
 
         var pid: pid_t = 0
         AXUIElementGetPid(hitElement, &pid)
         let runningApplication = NSRunningApplication(processIdentifier: pid)
-        guard let bundleIdentifier = runningApplication?.bundleIdentifier,
-              supportedBundleIdentifiers.contains(bundleIdentifier) else {
+        guard let bundleIdentifier = runningApplication?.bundleIdentifier else {
+            logger.error("Hit element has no application pid=\(pid, privacy: .public)")
+            throw AccessibilityClientError.unsupportedApplication
+        }
+        guard supportedBundleIdentifiers.contains(bundleIdentifier) else {
+            logger.error("Unsupported hit application pid=\(pid, privacy: .public) bundle=\(bundleIdentifier, privacy: .public)")
             throw AccessibilityClientError.unsupportedApplication
         }
 
-        guard var snapshot = captureSnapshot(from: hitElement, clickPoint: point) else {
+        // Chromium-based apps do not necessarily expose their web-content
+        // Accessibility tree until an assistive app requests it. Re-hit-test
+        // so we do not keep the detached placeholder returned beforehand.
+        let resolvedHitElement: AXUIElement
+        if chromiumBundleIdentifiers.contains(bundleIdentifier) {
+            prepareApplicationAccessibility(applicationPID: pid, bundleIdentifier: bundleIdentifier)
+            var refreshedElement: AXUIElement?
+            if AXUIElementCopyElementAtPosition(
+                systemWideElement,
+                Float(point.x),
+                Float(point.y),
+                &refreshedElement
+            ) == .success, let refreshedElement {
+                resolvedHitElement = refreshedElement
+            } else {
+                resolvedHitElement = hitElement
+            }
+        } else {
+            resolvedHitElement = hitElement
+        }
+
+        guard var snapshot = captureSnapshot(from: resolvedHitElement, clickPoint: point) else {
             throw AccessibilityClientError.noReadableResponse
         }
         var targetKind = TargetClassifier.classify(snapshot)
@@ -107,6 +138,26 @@ final class AccessibilityClient {
 
     private func adapter(for bundleIdentifier: String) -> any ResponseAdapter {
         bundleIdentifier == "com.anthropic.claudefordesktop" ? ClaudeResponseAdapter() : CodexResponseAdapter()
+    }
+
+    func prepareApplicationAccessibility(applicationPID: pid_t, bundleIdentifier: String) {
+        guard chromiumBundleIdentifiers.contains(bundleIdentifier),
+              preparedApplicationPIDs.insert(applicationPID).inserted else { return }
+
+        let application = AXUIElementCreateApplication(applicationPID)
+        // Reading the application role activates Chromium's native AX mode.
+        let _: String? = copyAttribute(application, kAXRoleAttribute as CFString)
+
+        guard bundleIdentifier == "com.anthropic.claudefordesktop" else { return }
+
+        let manualResult = AXUIElementSetAttributeValue(
+            application,
+            "AXManualAccessibility" as CFString,
+            kCFBooleanTrue
+        )
+        if manualResult != .success {
+            logger.error("Electron accessibility activation failed code=\(manualResult.rawValue, privacy: .public)")
+        }
     }
 
     private func responseSnapshot(

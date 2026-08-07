@@ -1,8 +1,10 @@
 import AppKit
 import ApplicationServices
+import OSLog
 
 @MainActor
 final class AppController: NSObject {
+    private let logger = Logger(subsystem: "com.azizemreayan.OutputLens", category: "AppController")
     private let supportedBundleIdentifiers = [
         "com.openai.codex",
         "com.anthropic.claudefordesktop",
@@ -49,6 +51,7 @@ final class AppController: NSObject {
         }
         configureStatusItem()
         installEventMonitor()
+        prepareRunningSourceApplications()
         NSWorkspace.shared.notificationCenter.addObserver(
             self,
             selector: #selector(applicationDidActivate(_:)),
@@ -147,7 +150,10 @@ final class AppController: NSObject {
         }
 
         let point = event.cgEvent?.location ?? CGPoint(x: event.locationInWindow.x, y: event.locationInWindow.y)
+        resolveTarget(at: point, retryIfUnavailable: true)
+    }
 
+    private func resolveTarget(at point: CGPoint, retryIfUnavailable: Bool = false) {
         do {
             switch try accessibility.target(at: point, supportedBundleIdentifiers: supportedBundleIdentifiers) {
             case .response(let snapshot):
@@ -157,8 +163,25 @@ final class AppController: NSObject {
             }
         } catch AccessibilityClientError.responseBoundaryNotIdentified {
             readerPanel.showSelectionFailure(AccessibilityClientError.responseBoundaryNotIdentified.localizedDescription)
+        } catch AccessibilityClientError.noReadableResponse where retryIfUnavailable {
+            DispatchQueue.main.asyncAfter(deadline: .now() + 3) { [weak self] in
+                self?.resolveTarget(at: point)
+            }
         } catch {
+            logger.error("Target resolution failed: \(error.localizedDescription, privacy: .public)")
             readerPanel.showMessage(error.localizedDescription)
+        }
+    }
+
+    private func prepareRunningSourceApplications() {
+        guard AXIsProcessTrusted() else { return }
+        for application in NSWorkspace.shared.runningApplications {
+            guard let bundleIdentifier = application.bundleIdentifier,
+                  supportedBundleIdentifiers.contains(bundleIdentifier) else { continue }
+            accessibility.prepareApplicationAccessibility(
+                applicationPID: application.processIdentifier,
+                bundleIdentifier: bundleIdentifier
+            )
         }
     }
 
@@ -290,8 +313,16 @@ final class AppController: NSObject {
     }
 
     @objc private func applicationDidActivate(_ notification: Notification) {
-        guard let runningApplication = notification.userInfo?[NSWorkspace.applicationUserInfoKey] as? NSRunningApplication,
-              let sourceApplicationPID else { return }
+        guard let runningApplication = notification.userInfo?[NSWorkspace.applicationUserInfoKey] as? NSRunningApplication else { return }
+        if let bundleIdentifier = runningApplication.bundleIdentifier,
+           supportedBundleIdentifiers.contains(bundleIdentifier),
+           AXIsProcessTrusted() {
+            accessibility.prepareApplicationAccessibility(
+                applicationPID: runningApplication.processIdentifier,
+                bundleIdentifier: bundleIdentifier
+            )
+        }
+        guard let sourceApplicationPID else { return }
         readerPanel.setVisible(runningApplication.processIdentifier == sourceApplicationPID)
     }
 
