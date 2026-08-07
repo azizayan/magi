@@ -1,5 +1,11 @@
 import Foundation
 
+struct ApplicationIdentity: Equatable {
+    let processIdentifier: pid_t
+    let bundleIdentifier: String
+    let name: String
+}
+
 enum SupportedApplication {
     static let desktopBundleIdentifiers: Set<String> = [
         "com.openai.codex",
@@ -33,5 +39,29 @@ enum SupportedApplication {
     static func isTerminal(bundleIdentifier: String, applicationName: String) -> Bool {
         terminalBundleIdentifiers.contains(bundleIdentifier)
             || terminalNames.contains(applicationName.lowercased())
+    }
+
+    /// Accessibility elements rendered by terminal helper processes can report
+    /// the helper PID rather than the owning GUI app PID. Walk upward until the
+    /// first supported application is found.
+    static func resolveOwner(
+        startingAt processIdentifier: pid_t,
+        applicationIdentity: (pid_t) -> ApplicationIdentity?,
+        parentProcessIdentifier: (pid_t) -> pid_t
+    ) -> ApplicationIdentity? {
+        var candidate = processIdentifier
+        var visited: Set<pid_t> = []
+        for _ in 0..<12 {
+            guard candidate > 1, visited.insert(candidate).inserted else { break }
+            if let identity = applicationIdentity(candidate),
+               isSupported(
+                bundleIdentifier: identity.bundleIdentifier,
+                applicationName: identity.name
+               ) {
+                return identity
+            }
+            candidate = parentProcessIdentifier(candidate)
+        }
+        return nil
     }
 }

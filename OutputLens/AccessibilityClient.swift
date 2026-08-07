@@ -1,5 +1,6 @@
 import AppKit
 import ApplicationServices
+import Darwin
 import OSLog
 
 struct ResponseSnapshot {
@@ -65,20 +66,21 @@ final class AccessibilityClient {
             throw AccessibilityClientError.noElement
         }
 
-        var pid: pid_t = 0
-        AXUIElementGetPid(hitElement, &pid)
-        let runningApplication = NSRunningApplication(processIdentifier: pid)
-        guard let bundleIdentifier = runningApplication?.bundleIdentifier else {
-            logger.error("Hit element has no application pid=\(pid, privacy: .public)")
+        var hitPID: pid_t = 0
+        AXUIElementGetPid(hitElement, &hitPID)
+        guard let owner = SupportedApplication.resolveOwner(
+            startingAt: hitPID,
+            applicationIdentity: applicationIdentity,
+            parentProcessIdentifier: parentProcessIdentifier
+        ) else {
+            logger.error("Unsupported hit application pid=\(hitPID, privacy: .public)")
             throw AccessibilityClientError.unsupportedApplication
         }
-        let applicationName = runningApplication?.localizedName ?? bundleIdentifier
-        guard SupportedApplication.isSupported(
-            bundleIdentifier: bundleIdentifier,
-            applicationName: applicationName
-        ) else {
-            logger.error("Unsupported hit application pid=\(pid, privacy: .public) bundle=\(bundleIdentifier, privacy: .public)")
-            throw AccessibilityClientError.unsupportedApplication
+        let pid = owner.processIdentifier
+        let bundleIdentifier = owner.bundleIdentifier
+        let applicationName = owner.name
+        if hitPID != pid {
+            logger.notice("Resolved helper pid=\(hitPID, privacy: .public) to owner pid=\(pid, privacy: .public) bundle=\(bundleIdentifier, privacy: .public)")
         }
 
         // Chromium-based apps do not necessarily expose their web-content
@@ -148,6 +150,28 @@ final class AccessibilityClient {
 
     private func adapter(for bundleIdentifier: String) -> any ResponseAdapter {
         bundleIdentifier == "com.anthropic.claudefordesktop" ? ClaudeResponseAdapter() : CodexResponseAdapter()
+    }
+
+    private func applicationIdentity(processIdentifier: pid_t) -> ApplicationIdentity? {
+        guard let application = NSRunningApplication(processIdentifier: processIdentifier),
+              let bundleIdentifier = application.bundleIdentifier else { return nil }
+        return ApplicationIdentity(
+            processIdentifier: processIdentifier,
+            bundleIdentifier: bundleIdentifier,
+            name: application.localizedName ?? bundleIdentifier
+        )
+    }
+
+    private func parentProcessIdentifier(_ processIdentifier: pid_t) -> pid_t {
+        var info = proc_bsdinfo()
+        let size = proc_pidinfo(
+            processIdentifier,
+            PROC_PIDTBSDINFO,
+            0,
+            &info,
+            Int32(MemoryLayout<proc_bsdinfo>.size)
+        )
+        return size > 0 ? pid_t(info.pbi_ppid) : 0
     }
 
     func prepareApplicationAccessibility(applicationPID: pid_t, bundleIdentifier: String) {
