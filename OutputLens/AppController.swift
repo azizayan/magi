@@ -6,16 +6,24 @@ final class AppController: NSObject {
     private let supportedBundleIdentifiers = [
         "com.openai.codex",
         "com.anthropic.claudefordesktop",
+        "com.apple.Terminal",
+        "com.googlecode.iterm2",
     ]
 
     private let accessibility = AccessibilityClient()
+    private let clipboardReader = ClipboardReader()
     private let readerPanel = ReaderPanelController()
     private let sourceHighlight = SourceHighlightController()
     private let statusItem = NSStatusBar.system.statusItem(withLength: NSStatusItem.variableLength)
 
     private var eventMonitor: Any?
     private var binding: ResponseBinding?
+    private var editorBinding: EditorBinding?
     private var sourceApplicationPID: pid_t?
+    private var clipboardText = ""
+    private var forceNextClipboard = false
+    private var hasPromptedForAccessibility = false
+    private var clipboardWatching = UserDefaults.standard.bool(forKey: "clipboardWatching")
     private var enabled = true
     private var trigger = Trigger.load()
 
@@ -23,8 +31,23 @@ final class AppController: NSObject {
         readerPanel.onUserClose = { [weak self] in
             self?.clearReadingSession()
         }
+        readerPanel.onApplyEditor = { [weak self] draft in
+            self?.applyEditorDraft(draft)
+        }
+        readerPanel.onCancelEditor = { [weak self] in
+            self?.clearReadingSession()
+            self?.readerPanel.close()
+        }
+        readerPanel.onEditorDraftChange = { [weak self] draft in
+            self?.editorBinding?.updateDraft(draft)
+        }
+        clipboardReader.onNewText = { [weak self] text in
+            self?.handleClipboardText(text)
+        }
+        if clipboardWatching {
+            clipboardReader.startWatching()
+        }
         configureStatusItem()
-        requestAccessibilityPermission()
         installEventMonitor()
         NSWorkspace.shared.notificationCenter.addObserver(
             self,
@@ -35,19 +58,33 @@ final class AppController: NSObject {
     }
 
     private func configureStatusItem() {
-        statusItem.button?.image = NSImage(systemSymbolName: "text.magnifyingglass", accessibilityDescription: "Output Lens")
+        statusItem.button?.image = NSImage(systemSymbolName: "text.magnifyingglass", accessibilityDescription: "Magi")
         rebuildMenu()
     }
 
     private func rebuildMenu() {
         let menu = NSMenu()
 
-        let enabledItem = NSMenuItem(title: enabled ? "Disable Output Lens" : "Enable Output Lens", action: #selector(toggleEnabled), keyEquivalent: "")
+        let enabledItem = NSMenuItem(title: enabled ? "Disable Magi" : "Enable Magi", action: #selector(toggleEnabled), keyEquivalent: "")
         enabledItem.target = self
         menu.addItem(enabledItem)
 
         menu.addItem(.separator())
-        let heading = NSMenuItem(title: "Activation Click", action: nil, keyEquivalent: "")
+        let clipboardHeading = NSMenuItem(title: "Copy to Magi (no permission)", action: nil, keyEquivalent: "")
+        clipboardHeading.isEnabled = false
+        menu.addItem(clipboardHeading)
+
+        let watchItem = NSMenuItem(title: "Watch Clipboard", action: #selector(toggleClipboardWatching), keyEquivalent: "")
+        watchItem.target = self
+        watchItem.state = clipboardWatching ? .on : .off
+        menu.addItem(watchItem)
+
+        let pasteItem = NSMenuItem(title: "Show Clipboard Now", action: #selector(showClipboardNow), keyEquivalent: "")
+        pasteItem.target = self
+        menu.addItem(pasteItem)
+
+        menu.addItem(.separator())
+        let heading = NSMenuItem(title: "Option-Click (needs Accessibility)", action: nil, keyEquivalent: "")
         heading.isEnabled = false
         menu.addItem(heading)
 
@@ -68,15 +105,28 @@ final class AppController: NSObject {
         closeItem.target = self
         menu.addItem(closeItem)
 
+        let fixtureItem = NSMenuItem(title: "Save Anonymized Click Fixture…", action: #selector(saveDiagnosticFixture), keyEquivalent: "")
+        fixtureItem.target = self
+        menu.addItem(fixtureItem)
+
         menu.addItem(.separator())
-        let quitItem = NSMenuItem(title: "Quit Output Lens", action: #selector(quit), keyEquivalent: "q")
+        let quitItem = NSMenuItem(title: "Quit Magi", action: #selector(quit), keyEquivalent: "q")
         quitItem.target = self
         menu.addItem(quitItem)
 
         statusItem.menu = menu
     }
 
-    private func requestAccessibilityPermission() {
+    /// Ask macOS to show the Accessibility prompt, but only when the user
+    /// actually invokes Option-click without the permission — never at launch,
+    /// and only once per session so we do not re-open the dialog on every
+    /// click. Clipboard capture never reaches here because it needs no access.
+    private func promptForAccessibilityIfNeeded() {
+        if hasPromptedForAccessibility {
+            readerPanel.showMessage("Option-click needs Accessibility access. Choose “Open Accessibility Settings…” from the Magi menu, enable Magi, then try again. Copy to Magi works without it.")
+            return
+        }
+        hasPromptedForAccessibility = true
         let options = ["AXTrustedCheckOptionPrompt": true] as CFDictionary
         _ = AXIsProcessTrustedWithOptions(options)
     }
@@ -92,29 +142,99 @@ final class AppController: NSObject {
     private func handleMouseDown(_ event: NSEvent) {
         guard enabled, trigger.matches(event.modifierFlags) else { return }
         guard AXIsProcessTrusted() else {
-            requestAccessibilityPermission()
+            promptForAccessibilityIfNeeded()
             return
         }
 
         let point = event.cgEvent?.location ?? CGPoint(x: event.locationInWindow.x, y: event.locationInWindow.y)
 
         do {
-            let snapshot = try accessibility.response(at: point, supportedBundleIdentifiers: supportedBundleIdentifiers)
-            binding?.invalidate()
-            binding = ResponseBinding(snapshot: snapshot, accessibility: accessibility) { [weak self] update in
-                self?.readerPanel.show(update.text, attachedTo: update.windowFrame, connectionState: update.connectionState)
+            switch try accessibility.target(at: point, supportedBundleIdentifiers: supportedBundleIdentifiers) {
+            case .response(let snapshot):
+                startReading(snapshot)
+            case .editor(let source):
+                startEditing(source)
             }
-            sourceApplicationPID = snapshot.applicationPID
-            sourceHighlight.flash(responseFrame: snapshot.responseFrame, inside: snapshot.windowFrame)
-            readerPanel.show(snapshot.text, attachedTo: snapshot.windowFrame, connectionState: .connected)
+        } catch AccessibilityClientError.responseBoundaryNotIdentified {
+            readerPanel.showSelectionFailure(AccessibilityClientError.responseBoundaryNotIdentified.localizedDescription)
         } catch {
             readerPanel.showMessage(error.localizedDescription)
         }
     }
 
+    private func startReading(_ snapshot: ResponseSnapshot) {
+        clearBindings()
+        binding = ResponseBinding(snapshot: snapshot, accessibility: accessibility) { [weak self] update in
+            self?.readerPanel.show(update.text, promptContext: update.promptContext, attachedTo: update.windowFrame, connectionState: update.connectionState)
+        }
+        sourceApplicationPID = snapshot.applicationPID
+        sourceHighlight.flash(responseFrame: snapshot.responseFrame, inside: snapshot.windowFrame)
+        readerPanel.show(snapshot.text, promptContext: snapshot.promptContext, attachedTo: snapshot.windowFrame, connectionState: .connected)
+    }
+
+    private func startEditing(_ source: EditorSource) {
+        clearBindings()
+        editorBinding = EditorBinding(source: source)
+        sourceApplicationPID = source.applicationPID
+        readerPanel.showEditor(
+            draft: source.originalText,
+            statusText: "\(source.applicationName) — \(source.capability.statusDescription)",
+            attachedTo: source.windowFrame
+        )
+    }
+
+    private func applyEditorDraft(_ draft: String) {
+        guard let editorBinding else { return }
+        editorBinding.updateDraft(draft)
+        switch editorBinding.apply(using: accessibility) {
+        case .applied:
+            readerPanel.showEditorStatus("Applied to \(editorBinding.source.applicationName). Nothing was submitted.", isError: false)
+        case .copiedForPaste:
+            clipboardReader.ignoreCurrentChange()
+            accessibility.focus(editorBinding.source.element)
+            NSRunningApplication(processIdentifier: editorBinding.source.applicationPID)?.activate()
+            readerPanel.showEditorStatus("Copied. Paste in \(editorBinding.source.applicationName) when ready; nothing was executed.", isError: false)
+        case .failed(let reason):
+            readerPanel.showEditorStatus(reason, isError: true)
+        }
+    }
+
+    private func handleClipboardText(_ text: String) {
+        guard enabled else { return }
+        // Ignore a selection the user copied out of the reader itself, which
+        // would otherwise replace the response with a fragment of itself.
+        // An explicit "Show Clipboard Now" bypasses this guard.
+        if !forceNextClipboard, !clipboardText.isEmpty, clipboardText.contains(text) { return }
+        clipboardText = text
+        clearBindings()
+        sourceApplicationPID = nil
+        sourceHighlight.hide()
+        readerPanel.showClipboardText(text)
+    }
+
+    @objc private func toggleClipboardWatching() {
+        clipboardWatching.toggle()
+        UserDefaults.standard.set(clipboardWatching, forKey: "clipboardWatching")
+        if clipboardWatching, enabled {
+            clipboardReader.startWatching()
+        } else {
+            clipboardReader.stopWatching()
+        }
+        rebuildMenu()
+    }
+
+    @objc private func showClipboardNow() {
+        forceNextClipboard = true
+        clipboardReader.captureNow()
+        forceNextClipboard = false
+    }
+
     @objc private func toggleEnabled() {
         enabled.toggle()
-        if !enabled {
+        if enabled {
+            if clipboardWatching { clipboardReader.startWatching() }
+        } else {
+            clipboardReader.stopWatching()
             clearReadingSession()
             readerPanel.close()
         }
@@ -139,11 +259,34 @@ final class AppController: NSObject {
         readerPanel.close()
     }
 
-    private func clearReadingSession() {
+    private func clearBindings() {
         binding?.invalidate()
         binding = nil
+        editorBinding = nil
+    }
+
+    private func clearReadingSession() {
+        clearBindings()
         sourceApplicationPID = nil
         sourceHighlight.hide()
+    }
+
+    @objc private func saveDiagnosticFixture() {
+        guard let snapshot = accessibility.lastRedactedSnapshot else {
+            readerPanel.showMessage("No click captured yet. Option-click in Codex or Claude first, then save the fixture.")
+            return
+        }
+        let encoder = JSONEncoder()
+        encoder.outputFormatting = [.prettyPrinted, .sortedKeys]
+        let formatter = ISO8601DateFormatter()
+        let url = FileManager.default.urls(for: .downloadsDirectory, in: .userDomainMask)[0]
+            .appendingPathComponent("magi-fixture-\(formatter.string(from: .now)).json")
+        do {
+            try encoder.encode(snapshot).write(to: url)
+            readerPanel.showMessage("Saved anonymized Accessibility fixture to \(url.path). Text is redacted to lengths and fingerprints.")
+        } catch {
+            readerPanel.showMessage("Could not save fixture: \(error.localizedDescription)")
+        }
     }
 
     @objc private func applicationDidActivate(_ notification: Notification) {

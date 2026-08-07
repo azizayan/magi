@@ -3,53 +3,11 @@ import ApplicationServices
 @testable import OutputLens
 
 final class ResponseHeuristicsTests: XCTestCase {
-    private let placeholder = AXUIElementCreateSystemWide()
-
-    func testSelectsResponseBeforeConversationSizedJump() {
-        let candidates = [
-            candidate(depth: 0, text: String(repeating: "a", count: 30)),
-            candidate(depth: 1, text: String(repeating: "b", count: 240)),
-            candidate(depth: 2, text: String(repeating: "c", count: 2_000)),
-        ]
-
-        XCTAssertEqual(ResponseHeuristics.selectCandidate(candidates)?.depth, 1)
-    }
-
-    func testAllowsSmallExpansionToWholeResponse() {
-        let candidates = [
-            candidate(depth: 0, text: "A paragraph"),
-            candidate(depth: 1, text: "A paragraph\nAnother paragraph"),
-        ]
-
-        XCTAssertEqual(ResponseHeuristics.selectCandidate(candidates)?.depth, 1)
-    }
-
-    func testResponseControlsSelectWholeResponseAcrossLargeContentJump() {
-        let candidates = [
-            candidate(depth: 0, text: "One list item"),
-            candidate(depth: 1, text: String(repeating: "list ", count: 50)),
-            candidate(depth: 2, text: String(repeating: "complete response with cards ", count: 80), actions: ["Copy", "Good response"]),
-            candidate(depth: 3, text: String(repeating: "conversation ", count: 500), actions: ["Copy", "Good response"]),
-        ]
-
-        XCTAssertEqual(ResponseHeuristics.selectCandidate(candidates)?.depth, 2)
-    }
-
-    func testDoesNotSelectWholeChatWhenOnlyConversationAncestorHasResponseControls() {
-        let conversationActions = Array(repeating: "Copy message", count: 16)
-        let candidates = [
-            candidate(depth: 0, text: String(repeating: "clicked text ", count: 20)),
-            candidate(depth: 1, text: String(repeating: "last response ", count: 24)),
-            candidate(depth: 2, text: String(repeating: "whole conversation ", count: 300), actions: conversationActions),
-        ]
-
-        XCTAssertEqual(ResponseHeuristics.selectCandidate(candidates)?.depth, 1)
-    }
-
     func testCopyCodeControlIsNotMistakenForResponseBoundary() {
-        XCTAssertFalse(ResponseHeuristics.hasResponseControls(["Copy code"]))
-        XCTAssertTrue(ResponseHeuristics.hasResponseControls(["Copy response"]))
-        XCTAssertTrue(ResponseHeuristics.hasResponseControls(["Show message actions"]))
+        let markers = CodexResponseAdapter().markers
+        XCTAssertFalse(markers.matches(["Copy code"]))
+        XCTAssertTrue(markers.matches(["Copy response"]))
+        XCTAssertTrue(markers.matches(["Show message actions"]))
     }
 
     func testSafeUpdateAcceptsStreamingAppend() {
@@ -108,10 +66,6 @@ final class ResponseHeuristicsTests: XCTestCase {
         ]
 
         XCTAssertEqual(ResponseHeuristics.assemble(fragments), "Claude responded: Opening")
-    }
-
-    private func candidate(depth: Int, text: String, actions: [String] = []) -> ResponseCandidate {
-        ResponseCandidate(element: placeholder, depth: depth, role: "AXGroup", description: "", text: text, actionNames: actions)
     }
 
     private func fragment(_ text: String, x: CGFloat, y: CGFloat, role: String = kAXStaticTextRole as String) -> ResponseTextFragment {

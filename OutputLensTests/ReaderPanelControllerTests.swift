@@ -35,4 +35,53 @@ final class ReaderPanelControllerTests: XCTestCase {
 
         XCTAssertEqual(rendered.string, "Heading\nlet value = 1\n")
     }
+
+    func testRenderMakesMarkdownLinkClickable() {
+        let rendered = ReaderPanelController.render("See the [docs](https://example.com/guide) now", proseFontSize: 24)
+
+        XCTAssertEqual(rendered.string, "See the docs now")
+        let link = rendered.attribute(.link, at: 8, effectiveRange: nil) as? URL
+        XCTAssertEqual(link, URL(string: "https://example.com/guide"))
+    }
+
+    func testRenderLinkifiesBareURL() {
+        let rendered = ReaderPanelController.render("Visit https://example.com for details", proseFontSize: 24)
+
+        XCTAssertEqual(rendered.string, "Visit https://example.com for details")
+        let link = rendered.attribute(.link, at: 6, effectiveRange: nil) as? URL
+        XCTAssertEqual(link, URL(string: "https://example.com"))
+    }
+
+    func testRenderStripsRelativeLinkSyntaxWithoutDeadLink() {
+        let rendered = ReaderPanelController.render("Open [CLAUDE.md](CLAUDE.md) here", proseFontSize: 24)
+
+        XCTAssertEqual(rendered.string, "Open CLAUDE.md here")
+        XCTAssertNil(rendered.attribute(.link, at: 5, effectiveRange: nil))
+    }
+
+    func testComposeIncludesPromptHeaderWhenEnabled() {
+        let rendered = ReaderPanelController.composeReaderContent(
+            promptContext: "Explain the build", response: "The build works", showsPrompt: true, proseFontSize: 24
+        )
+
+        XCTAssertTrue(rendered.string.contains("PROMPT"))
+        XCTAssertTrue(rendered.string.contains("Explain the build"))
+        XCTAssertTrue(rendered.string.hasSuffix("The build works"))
+    }
+
+    func testComposeOmitsPromptHeaderWhenDisabled() {
+        let rendered = ReaderPanelController.composeReaderContent(
+            promptContext: "Explain the build", response: "The build works", showsPrompt: false, proseFontSize: 24
+        )
+
+        XCTAssertEqual(rendered.string, "The build works")
+    }
+
+    func testComposeOmitsPromptHeaderWhenNoPromptAvailable() {
+        let rendered = ReaderPanelController.composeReaderContent(
+            promptContext: nil, response: "The build works", showsPrompt: true, proseFontSize: 24
+        )
+
+        XCTAssertEqual(rendered.string, "The build works")
+    }
 }

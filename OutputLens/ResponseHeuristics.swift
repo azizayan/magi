@@ -6,15 +6,6 @@ struct ResponseTextFragment {
     let role: String
 }
 
-struct ResponseCandidate {
-    let element: AXUIElement
-    let depth: Int
-    let role: String
-    let description: String
-    let text: String
-    let actionNames: [String]
-}
-
 enum ResponseHeuristics {
     static func assemble(_ fragments: [ResponseTextFragment]) -> String {
         var unique: [ResponseTextFragment] = []
@@ -39,60 +30,14 @@ enum ResponseHeuristics {
         return normalize(result)
     }
 
-    static func selectCandidate(_ candidates: [ResponseCandidate]) -> ResponseCandidate? {
-        let readable = candidates.filter { !$0.text.isEmpty && $0.text.count <= 100_000 }
-        if let responseIndex = readable.firstIndex(where: { hasResponseControls($0.actionNames) }) {
-            let responseContainer = readable[responseIndex]
-            let child = responseIndex > 0 ? readable[responseIndex - 1] : nil
-            if !isConversationContainer(responseContainer, comparedTo: child) {
-                return responseContainer
-            }
-        }
-        guard var selected = readable.first else { return nil }
-
-        for candidate in readable.dropFirst() {
-            guard candidate.text.count >= selected.text.count else { continue }
-
-            let expansion = candidate.text.count - selected.text.count
-            let isConversationSizedJump = selected.text.count >= 40 &&
-                candidate.text.count > selected.text.count * 3 &&
-                expansion > 500
-
-            if isConversationSizedJump {
-                break
-            }
-
-            selected = candidate
-        }
-        return selected
-    }
-
-    private static func isConversationContainer(_ candidate: ResponseCandidate, comparedTo child: ResponseCandidate?) -> Bool {
-        guard let child, candidate.actionNames.count > 12 else { return false }
-        return child.text.count >= 40 &&
-            candidate.text.count > child.text.count * 3 &&
-            candidate.text.count - child.text.count > 500
-    }
-
-    static func hasResponseControls(_ actionNames: [String]) -> Bool {
-        actionNames.contains { name in
-            let normalized = name.lowercased().trimmingCharacters(in: .whitespacesAndNewlines)
-            return normalized == "copy" ||
-                normalized == "show message actions" ||
-                normalized.contains("copy response") ||
-                normalized.contains("copy message") ||
-                normalized.contains("good response") ||
-                normalized.contains("bad response") ||
-                normalized.contains("thumbs up") ||
-                normalized.contains("thumbs down")
-        }
-    }
-
     static func normalize(_ text: String) -> String {
+        normalizeLineEndings(text).trimmingCharacters(in: .whitespacesAndNewlines)
+    }
+
+    static func normalizeLineEndings(_ text: String) -> String {
         text
             .replacingOccurrences(of: "\r\n", with: "\n")
             .replacingOccurrences(of: "\r", with: "\n")
-            .trimmingCharacters(in: .whitespacesAndNewlines)
     }
 
     static func isSafeUpdate(previous: String, next: String) -> Bool {

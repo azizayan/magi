@@ -7,13 +7,14 @@ enum ConnectionState {
 
 struct ResponseUpdate {
     let text: String
+    let promptContext: String?
     let windowFrame: CGRect
     let connectionState: ConnectionState
 }
 
 @MainActor
 final class ResponseBinding {
-    private let snapshot: ResponseSnapshot
+    private var snapshot: ResponseSnapshot
     private let accessibility: AccessibilityClient
     private let onUpdate: (ResponseUpdate) -> Void
     private var timer: Timer?
@@ -40,20 +41,29 @@ final class ResponseBinding {
 
     private func refresh() {
         guard let windowFrame = accessibility.frame(of: snapshot.windowElement),
-              let nextText = accessibility.text(of: snapshot.responseElement),
-              ResponseHeuristics.isSafeUpdate(previous: lastText, next: nextText) else {
+              let resolution = accessibility.refreshResponse(snapshot, previousText: lastText) else {
+            // Identity lost: pause on the last confirmed text instead of
+            // expanding to a parent conversation.
             if connectionState != .paused {
                 connectionState = .paused
-                onUpdate(ResponseUpdate(text: lastText, windowFrame: snapshot.windowFrame, connectionState: .paused))
+                onUpdate(ResponseUpdate(text: lastText, promptContext: snapshot.promptContext, windowFrame: snapshot.windowFrame, connectionState: .paused))
             }
             return
         }
 
         connectionState = .connected
-        if nextText != lastText {
-            lastText = nextText
-        }
-        onUpdate(ResponseUpdate(text: lastText, windowFrame: windowFrame, connectionState: .connected))
+        lastText = resolution.text
+        snapshot = ResponseSnapshot(
+            applicationPID: snapshot.applicationPID,
+            containerElement: snapshot.containerElement,
+            windowElement: snapshot.windowElement,
+            adapter: snapshot.adapter,
+            sectionIndex: resolution.sectionIndex,
+            text: resolution.text,
+            promptContext: resolution.promptContext ?? snapshot.promptContext,
+            responseFrame: resolution.frame ?? snapshot.responseFrame,
+            windowFrame: windowFrame
+        )
+        onUpdate(ResponseUpdate(text: lastText, promptContext: snapshot.promptContext, windowFrame: windowFrame, connectionState: .connected))
     }
 }
-

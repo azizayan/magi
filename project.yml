@@ -19,10 +19,10 @@ targets:
     info:
       path: OutputLens/Info.plist
       properties:
-        CFBundleDisplayName: Output Lens
-        CFBundleName: Output Lens
+        CFBundleDisplayName: Magi
+        CFBundleName: Magi
         LSUIElement: true
-        NSAccessibilityUsageDescription: Output Lens uses Accessibility access to read the Codex or Claude response you select.
+        NSAccessibilityUsageDescription: Magi uses Accessibility access to read the Codex or Claude response or editable input you Option-click, including supported terminals. Clipboard capture needs no permission.
         NSHumanReadableCopyright: Copyright © 2026
     settings:
       base:

@@ -4,38 +4,59 @@ import OSLog
 
 struct ResponseSnapshot {
     let applicationPID: pid_t
-    let responseElement: AXUIElement
+    let containerElement: AXUIElement
     let windowElement: AXUIElement
+    let adapter: any ResponseAdapter
+    let sectionIndex: Int
     let text: String
+    let promptContext: String?
     let responseFrame: CGRect
     let windowFrame: CGRect
+}
+
+enum ResolvedTarget {
+    case response(ResponseSnapshot)
+    case editor(EditorSource)
 }
 
 enum AccessibilityClientError: LocalizedError {
     case noElement
     case unsupportedApplication
     case noReadableResponse
+    case responseBoundaryNotIdentified
     case noWindow
 
     var errorDescription: String? {
         switch self {
         case .noElement:
-            "Output Lens could not find text at that point."
+            "Magi could not find anything at that point."
         case .unsupportedApplication:
-            "Option-click a response inside the Codex or Claude desktop app."
+            "Option-click inside the Codex or Claude desktop app."
         case .noReadableResponse:
-            "That item does not expose a readable response. Try clicking directly on its text."
+            "That item does not expose readable content. Try clicking directly on its text."
+        case .responseBoundaryNotIdentified:
+            "Magi could not confidently identify which response was clicked, so the previous content is unchanged."
         case .noWindow:
-            "Output Lens could not identify the source window."
+            "Magi could not identify the source window."
         }
     }
 }
 
 final class AccessibilityClient {
+    private let terminalBundleIdentifiers: Set<String> = [
+        "com.apple.Terminal",
+        "com.googlecode.iterm2",
+    ]
     private let systemWideElement = AXUIElementCreateSystemWide()
-    private let logger = Logger(subsystem: "com.azizemreayan.OutputLens", category: "ResponseSelection")
+    private let logger = Logger(subsystem: "com.azizemreayan.OutputLens", category: "TargetSelection")
 
-    func response(at point: CGPoint, supportedBundleIdentifiers: [String]) throws -> ResponseSnapshot {
+    /// Elements backing the most recent snapshot, keyed by node ID.
+    private var elementsByNodeID: [Int: AXUIElement] = [:]
+    private(set) var lastRedactedSnapshot: TargetSnapshot?
+
+    // MARK: - Target resolution
+
+    func target(at point: CGPoint, supportedBundleIdentifiers: [String]) throws -> ResolvedTarget {
         var hitElement: AXUIElement?
         guard AXUIElementCopyElementAtPosition(systemWideElement, Float(point.x), Float(point.y), &hitElement) == .success,
               let hitElement else {
@@ -44,37 +65,221 @@ final class AccessibilityClient {
 
         var pid: pid_t = 0
         AXUIElementGetPid(hitElement, &pid)
-        guard let bundleIdentifier = NSRunningApplication(processIdentifier: pid)?.bundleIdentifier,
+        let runningApplication = NSRunningApplication(processIdentifier: pid)
+        guard let bundleIdentifier = runningApplication?.bundleIdentifier,
               supportedBundleIdentifiers.contains(bundleIdentifier) else {
             throw AccessibilityClientError.unsupportedApplication
         }
 
-        let candidates = ancestorCandidates(from: hitElement)
-        guard let selected = ResponseHeuristics.selectCandidate(candidates), !selected.text.isEmpty else {
+        guard let snapshot = captureSnapshot(from: hitElement, clickPoint: point) else {
             throw AccessibilityClientError.noReadableResponse
         }
+        lastRedactedSnapshot = SnapshotRedaction.redacted(snapshot)
+        #if DEBUG
+        logger.notice("Snapshot:\n\(SnapshotRedaction.structuralSummary(self.lastRedactedSnapshot ?? snapshot), privacy: .public)")
+        autoSaveFixture(lastRedactedSnapshot!)
+        #endif
 
-        guard let window: AXUIElement = copyAttribute(selected.element, kAXWindowAttribute as CFString),
-              let frame = frame(of: window) else {
+        switch TargetClassifier.classify(snapshot) {
+        case .editableInput(let nodeID):
+            return .editor(try editorSource(
+                nodeID: nodeID,
+                applicationPID: pid,
+                applicationName: runningApplication?.localizedName ?? bundleIdentifier,
+                bundleIdentifier: bundleIdentifier
+            ))
+        case .assistantResponse:
+            return .response(try responseSnapshot(
+                snapshot,
+                adapter: adapter(for: bundleIdentifier),
+                applicationPID: pid
+            ))
+        case .unsupported:
+            throw AccessibilityClientError.noReadableResponse
+        }
+    }
+
+    private func adapter(for bundleIdentifier: String) -> any ResponseAdapter {
+        bundleIdentifier == "com.anthropic.claudefordesktop" ? ClaudeResponseAdapter() : CodexResponseAdapter()
+    }
+
+    private func responseSnapshot(
+        _ snapshot: TargetSnapshot,
+        adapter: any ResponseAdapter,
+        applicationPID: pid_t
+    ) throws -> ResponseSnapshot {
+        guard let resolution = ResponseSelection.resolve(snapshot: snapshot, adapter: adapter) else {
+            throw AccessibilityClientError.responseBoundaryNotIdentified
+        }
+        guard let containerElement = elementsByNodeID[resolution.containerID] else {
+            throw AccessibilityClientError.responseBoundaryNotIdentified
+        }
+        guard let window: AXUIElement = copyAttribute(containerElement, kAXWindowAttribute as CFString),
+              let windowFrame = frame(of: window) else {
             throw AccessibilityClientError.noWindow
         }
-        let responseFrame = self.frame(of: selected.element) ?? frame
 
-        logCandidates(candidates, selected: selected)
+        logger.notice("Selected adapter=\(resolution.adapterName, privacy: .public) section=\(resolution.sectionIndex) of clusters=\(resolution.clusterCount) chars=\(resolution.text.count) fp=\(SnapshotRedaction.fingerprint(resolution.text), privacy: .public)")
 
         return ResponseSnapshot(
-            applicationPID: pid,
-            responseElement: selected.element,
+            applicationPID: applicationPID,
+            containerElement: containerElement,
             windowElement: window,
-            text: selected.text,
-            responseFrame: responseFrame,
-            windowFrame: frame
+            adapter: adapter,
+            sectionIndex: resolution.sectionIndex,
+            text: resolution.text,
+            promptContext: resolution.promptContext,
+            responseFrame: resolution.frame ?? windowFrame,
+            windowFrame: windowFrame
         )
     }
 
-    func text(of element: AXUIElement) -> String? {
-        ResponseHeuristics.assemble(collectTextFragments(from: element, depth: 0, remainingNodes: 800))
+    private func editorSource(
+        nodeID: Int,
+        applicationPID: pid_t,
+        applicationName: String,
+        bundleIdentifier: String
+    ) throws -> EditorSource {
+        guard let element = elementsByNodeID[nodeID] else {
+            throw AccessibilityClientError.noElement
+        }
+        guard let window: AXUIElement = copyAttribute(element, kAXWindowAttribute as CFString),
+              let windowFrame = frame(of: window) else {
+            throw AccessibilityClientError.noWindow
+        }
+
+        let isTerminal = terminalBundleIdentifiers.contains(bundleIdentifier)
+        // Terminal text areas usually expose the entire screen buffer rather
+        // than only the command being edited. Start with a safe empty draft
+        // instead of importing unrelated terminal history.
+        let text: String = isTerminal ? "" : (copyAttribute(element, kAXValueAttribute as CFString) ?? "")
+        let capability: WriteBackCapability
+        if isTerminal {
+            capability = .pasteRequired
+        } else {
+            capability = isValueSettable(element) ? .direct : .unavailable
+        }
+        return EditorSource(
+            applicationPID: applicationPID,
+            applicationName: applicationName,
+            element: element,
+            windowElement: window,
+            windowFrame: windowFrame,
+            capability: capability,
+            originalText: text
+        )
     }
+
+    // MARK: - Streaming refresh
+
+    /// Re-resolve the bound message from a fresh snapshot of the same
+    /// container. Returns nil when the message identity cannot be confirmed.
+    func refreshResponse(_ snapshot: ResponseSnapshot, previousText: String) -> ResponseResolution? {
+        var builder = SnapshotBuilder(hitElement: snapshot.containerElement, budget: 3000)
+        guard let root = build(snapshot.containerElement, depth: 0, builder: &builder) else { return nil }
+        let containerSnapshot = TargetSnapshot(root: root, hitNodeID: root.id, clickPoint: .zero)
+        return ResponseSelection.refresh(
+            containerSnapshot: containerSnapshot,
+            adapter: snapshot.adapter,
+            sectionIndex: snapshot.sectionIndex,
+            previousText: previousText
+        )
+    }
+
+    // MARK: - Snapshot capture
+
+    func captureSnapshot(from hitElement: AXUIElement, clickPoint: CGPoint) -> TargetSnapshot? {
+        var ancestors: [AXUIElement] = [hitElement]
+        var current: AXUIElement? = hitElement
+        for _ in 0..<15 {
+            guard let node = current,
+                  let parent: AXUIElement = copyAttribute(node, kAXParentAttribute as CFString) else { break }
+            let role: String = copyAttribute(parent, kAXRoleAttribute as CFString) ?? ""
+            if role == (kAXWindowRole as String) || role == "AXApplication" { break }
+            ancestors.append(parent)
+            current = parent
+        }
+
+        // Build from the highest ancestor; if the node budget truncates the
+        // tree before reaching the hit element, retry from a lower root so the
+        // clicked element is always represented.
+        for root in ancestors.reversed() {
+            var builder = SnapshotBuilder(hitElement: hitElement, budget: 3000)
+            guard let rootNode = build(root, depth: 0, builder: &builder) else { continue }
+            if let hitID = builder.hitID {
+                elementsByNodeID = builder.elements
+                return TargetSnapshot(root: rootNode, hitNodeID: hitID, clickPoint: clickPoint)
+            }
+        }
+        return nil
+    }
+
+    private struct SnapshotBuilder {
+        let hitElement: AXUIElement
+        var budget: Int
+        var nextID = 0
+        var elements: [Int: AXUIElement] = [:]
+        var hitID: Int?
+    }
+
+    private func build(_ element: AXUIElement, depth: Int, builder: inout SnapshotBuilder) -> SnapshotNode? {
+        guard depth <= 40, builder.budget > 0 else { return nil }
+        builder.budget -= 1
+
+        let id = builder.nextID
+        builder.nextID += 1
+        builder.elements[id] = element
+        if CFEqual(element, builder.hitElement) {
+            builder.hitID = id
+        }
+
+        let role: String = copyAttribute(element, kAXRoleAttribute as CFString) ?? "unknown"
+        let identifier: String = copyAttribute(element, kAXIdentifierAttribute as CFString) ?? ""
+        let label: String = copyAttribute(element, kAXDescriptionAttribute as CFString) ?? ""
+        let isButton = role == (kAXButtonRole as String) || role == "AXMenuButton"
+        let text: String = isButton ? "" : (copyAttribute(element, kAXValueAttribute as CFString) ?? "")
+
+        var actionTitles: [String] = []
+        if isButton {
+            let values: [String?] = [
+                copyAttribute(element, kAXTitleAttribute as CFString),
+                label.isEmpty ? nil : label,
+                copyAttribute(element, kAXHelpAttribute as CFString),
+                identifier.isEmpty ? nil : identifier,
+            ]
+            actionTitles = values.compactMap { value in
+                guard let value else { return nil }
+                let trimmed = value.trimmingCharacters(in: .whitespacesAndNewlines)
+                return trimmed.isEmpty ? nil : trimmed
+            }
+        }
+
+        let settable = TargetClassifier.editableRoles.contains(role) && isValueSettable(element)
+
+        var childNodes: [SnapshotNode] = []
+        if let children: [AXUIElement] = copyAttribute(element, kAXChildrenAttribute as CFString) {
+            for child in children {
+                guard builder.budget > 0 else { break }
+                if let childNode = build(child, depth: depth + 1, builder: &builder) {
+                    childNodes.append(childNode)
+                }
+            }
+        }
+
+        return SnapshotNode(
+            id: id,
+            role: role,
+            identifier: identifier,
+            label: label,
+            text: ResponseHeuristics.normalizeLineEndings(text),
+            frame: frame(of: element),
+            isValueSettable: settable,
+            actionTitles: actionTitles,
+            children: childNodes
+        )
+    }
+
+    // MARK: - Element helpers
 
     func frame(of element: AXUIElement) -> CGRect? {
         guard let positionValue: AXValue = copyAttribute(element, kAXPositionAttribute as CFString),
@@ -87,101 +292,43 @@ final class AccessibilityClient {
         return CGRect(origin: position, size: size)
     }
 
-    private func ancestorCandidates(from element: AXUIElement) -> [ResponseCandidate] {
-        var candidates: [ResponseCandidate] = []
-        var current: AXUIElement? = element
+    #if DEBUG
+    /// Debug builds drop a redacted fixture of every click at a fixed path so a
+    /// failing selection can be captured without hunting for a menu item. Text
+    /// is already reduced to lengths and fingerprints — no conversation content.
+    private func autoSaveFixture(_ snapshot: TargetSnapshot) {
+        let encoder = JSONEncoder()
+        encoder.outputFormatting = [.prettyPrinted, .sortedKeys]
+        guard let data = try? encoder.encode(snapshot),
+              let downloads = FileManager.default.urls(for: .downloadsDirectory, in: .userDomainMask).first else { return }
+        try? data.write(to: downloads.appendingPathComponent("magi-last-click.json"))
+    }
+    #endif
 
-        for depth in 0..<12 {
-            guard let node = current else { break }
-            let role: String = copyAttribute(node, kAXRoleAttribute as CFString) ?? "unknown"
-            let description: String = copyAttribute(node, kAXDescriptionAttribute as CFString) ?? ""
-            let text = ResponseHeuristics.assemble(collectTextFragments(from: node, depth: 0, remainingNodes: 800))
-            if !text.isEmpty {
-                candidates.append(ResponseCandidate(
-                    element: node,
-                    depth: depth,
-                    role: role,
-                    description: description,
-                    text: text,
-                    actionNames: collectActionNames(from: node, depth: 0, remainingNodes: 300)
-                ))
-            }
-            current = copyAttribute(node, kAXParentAttribute as CFString)
-        }
-        return candidates
+    func isElementAlive(_ element: AXUIElement) -> Bool {
+        let role: String? = copyAttribute(element, kAXRoleAttribute as CFString)
+        return role != nil
     }
 
-    private func collectTextFragments(from element: AXUIElement, depth: Int, remainingNodes: Int) -> [ResponseTextFragment] {
-        guard depth <= 10, remainingNodes > 0 else { return [] }
-
-        let role: String = copyAttribute(element, kAXRoleAttribute as CFString) ?? ""
-        if role == (kAXButtonRole as String),
-           ResponseHeuristics.hasResponseControls(actionNames(of: element)) {
-            return []
+    func isValueSettable(_ element: AXUIElement) -> Bool {
+        var settable = DarwinBoolean(false)
+        guard AXUIElementIsAttributeSettable(element, kAXValueAttribute as CFString, &settable) == .success else {
+            return false
         }
-        if let value: String = copyAttribute(element, kAXValueAttribute as CFString),
-           !value.trimmingCharacters(in: .whitespacesAndNewlines).isEmpty,
-           role != (kAXButtonRole as String) {
-            return [ResponseTextFragment(text: value, frame: frame(of: element), role: role)]
-        }
-
-        guard let children: [AXUIElement] = copyAttribute(element, kAXChildrenAttribute as CFString),
-              !children.isEmpty else { return [] }
-
-        var fragments: [ResponseTextFragment] = []
-        var budget = remainingNodes - 1
-        for child in children where budget > 0 {
-            let childFragments = collectTextFragments(from: child, depth: depth + 1, remainingNodes: budget)
-            for fragment in childFragments {
-                fragments.append(fragment)
-            }
-            budget -= 1
-        }
-        return fragments
+        return settable.boolValue
     }
 
-    private func collectActionNames(from element: AXUIElement, depth: Int, remainingNodes: Int) -> [String] {
-        guard depth <= 8, remainingNodes > 0 else { return [] }
-
-        let role: String = copyAttribute(element, kAXRoleAttribute as CFString) ?? ""
-        if role == (kAXButtonRole as String) {
-            return actionNames(of: element)
-        }
-
-        guard let children: [AXUIElement] = copyAttribute(element, kAXChildrenAttribute as CFString) else { return [] }
-        var names: [String] = []
-        var budget = remainingNodes - 1
-        for child in children where budget > 0 {
-            names.append(contentsOf: collectActionNames(from: child, depth: depth + 1, remainingNodes: budget))
-            budget -= 1
-        }
-        return names
+    func setValue(_ text: String, of element: AXUIElement) -> Bool {
+        AXUIElementSetAttributeValue(element, kAXValueAttribute as CFString, text as CFString) == .success
     }
 
-    private func actionNames(of button: AXUIElement) -> [String] {
-        let values: [String?] = [
-            copyAttribute(button, kAXTitleAttribute as CFString),
-            copyAttribute(button, kAXDescriptionAttribute as CFString),
-            copyAttribute(button, kAXHelpAttribute as CFString),
-            copyAttribute(button, kAXIdentifierAttribute as CFString),
-        ]
-        return values.compactMap { value in
-            guard let value else { return nil }
-            let trimmed = value.trimmingCharacters(in: .whitespacesAndNewlines)
-            return trimmed.isEmpty ? nil : trimmed
-        }
+    func focus(_ element: AXUIElement) {
+        AXUIElementSetAttributeValue(element, kAXFocusedAttribute as CFString, kCFBooleanTrue)
     }
 
     private func copyAttribute<T>(_ element: AXUIElement, _ attribute: CFString) -> T? {
         var value: CFTypeRef?
         guard AXUIElementCopyAttributeValue(element, attribute, &value) == .success else { return nil }
         return value as? T
-    }
-
-    private func logCandidates(_ candidates: [ResponseCandidate], selected: ResponseCandidate) {
-        let summary = candidates.map { candidate in
-            "depth=\(candidate.depth) role=\(candidate.role) chars=\(candidate.text.count) actions=\(candidate.actionNames.joined(separator: ","))\(candidate.depth == selected.depth ? " SELECTED" : "")"
-        }.joined(separator: " | ")
-        logger.notice("Candidates: \(summary, privacy: .public)")
     }
 }

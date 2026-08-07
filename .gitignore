@@ -4,3 +4,4 @@
 /target/
 *.xcuserstate
 xcuserdata/
+/dist/

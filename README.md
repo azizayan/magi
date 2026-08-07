@@ -1,75 +1,108 @@
-# Magi / Output Lens
+# Magi
 
-Magi is migrating Output Lens into a cross-platform Rust reader for Codex and Claude output. The working native macOS prototype remains available during the migration.
+Magi makes Codex and Claude desktop output comfortably readable: it lifts one
+model response into a large, high-contrast reading panel without changing the
+source application.
 
-## Rust cross-platform app
+There is one Magi product with a native app per platform:
 
-The Rust app uses a permission-free **Copy to Magi** workflow: start Magi, then use the Copy button on a complete Codex or Claude response. The always-on-top reader updates from the clipboard without macOS Accessibility access.
+- **Magi for macOS** (Swift/AppKit) — a menu-bar app with two capture modes:
+  permission-free **Copy to Magi** (clipboard) and enhanced **Option-click**
+  (reads the exact response through Accessibility). One download, one app.
+- **Magi for Windows and Linux** (Rust/egui) — the cross-platform **Copy to
+  Magi** clipboard reader. No Accessibility permission required.
 
-```sh
-cargo run
-```
+Extracted text always stays on the local machine.
 
-On macOS, build a normal app bundle with:
+## Magi for macOS
 
-```sh
-./scripts/build-macos-app.sh
-open target/debug/Magi.app
-```
+The macOS app works with no permission at all through the clipboard, and offers
+a richer Option-click mode when you grant Accessibility access.
 
-The reader supports selectable text, persistent font size, pausing automatic clipboard updates, and manual **Paste now** capture. Its menu-bar icon can show or hide the reader, pause updates, or quit; closing the window hides it instead of stopping Magi. The global show/hide shortcut defaults to **Option-M** and can be changed in the reader.
+**Copy to Magi (no permission).** Enable *Watch Clipboard* from the menu-bar
+icon, then use the Copy button on a complete Codex or Claude response; the
+reader shows it. *Show Clipboard Now* captures on demand. Pre-existing clipboard
+content is never shown automatically, and copying a selection out of the reader
+does not replace the response.
 
-Clipboard text stays on the computer. While automatic updates are enabled, unrelated text copies will also replace the reader; pause updates before copying sensitive text.
+**Option-click (needs Accessibility).** Option-click a response to open exactly
+the clicked assistant message in **Reader** mode:
 
-Run Rust tests with `cargo test`. See [MIGRATION.md](MIGRATION.md) for the architecture, permission boundary, migration stages, and manual validation checklist.
-
-## Native macOS prototype
-
-The Swift prototype provides the enhanced Option-click workflow. It still needs macOS Accessibility permission because it reads response elements from another application; implementing the adapter in Rust cannot remove that operating-system requirement.
-
-### Current prototype
-
-- Targets Codex (`com.openai.codex`) and Claude (`com.anthropic.claudefordesktop`).
-- Option-click a response to open the whole response.
-- Uses response-level Accessibility controls to avoid stopping at an inner list or code block.
-- Keeps the panel bound to that response while its text streams.
-- Replaces the content when another response is selected.
-- Moves and resizes with the source window.
-- Hides when the source application is not active.
-- Offers alternative modifier-click triggers from its menu-bar icon.
-- Offers persistent smaller/larger text controls in the reading panel.
-- Briefly outlines the selected source response so the active connection is visible.
-- Styles bullets, headings, inline code, and fenced code blocks for easier scanning.
-- Closing the panel ends its active streaming connection.
-- Keeps all extracted text on the Mac.
+- Per-app adapters (Codex, Claude) treat message-action rows as message
+  boundaries and partition the conversation by them; there is no
+  whole-conversation fallback. An unidentifiable boundary keeps the previous
+  content and reports the failure instead of showing the whole chat.
+- Streaming stays bound to the same message (verified by section index and text
+  fingerprint); it pauses rather than switching messages.
+- An optional dimmed **prompt** header (off by default) shows the message that
+  produced the response.
+- Option-click an editable input to open **Editor** mode: a large monospaced
+  draft whose **Apply to Input** writes back through Accessibility and never
+  submits or runs anything. Drafts survive a lost source element.
+- Option-click macOS Terminal or iTerm2 to open an empty **Semi-Code Editor**.
+  **Apply** copies the draft and returns focus to the terminal; the user pastes
+  explicitly, so Magi never injects or executes a command.
+- Links in a rendered response are clickable.
 
 ### Build and run
 
-Requirements: macOS 14 or newer, Xcode, and XcodeGen.
+Requirements: macOS 14+, Xcode, and XcodeGen. The Xcode project is generated
+from `project.yml`; edit that (not the `.xcodeproj`) and run `xcodegen generate`.
 
 ```sh
-./build.sh
-open "/private/tmp/output-lens-build/Debug/OutputLens.app"
+./build.sh                    # debug build at /private/tmp/output-lens-build/Debug
+./scripts/package-macos.sh    # distributable dist/Magi.app + dist/Magi-macos.zip
 ```
 
-The first launch opens **System Settings → Privacy & Security → Accessibility**. Enable Output Lens, return to Codex or Claude, and Option-click directly on response text.
-
-The development build embeds a stable bundle-identifier requirement after Xcode's ad-hoc signing step. This keeps macOS Accessibility authorization valid across local rebuilds. A distributed production build should use an Apple Developer certificate instead.
-
-### Tests
+Tests:
 
 ```sh
-xcodebuild \
-  -project OutputLens.xcodeproj \
-  -scheme OutputLens \
-  -destination 'platform=macOS' \
-  -derivedDataPath "/private/tmp/output-lens-derived" \
-  CODE_SIGNING_ALLOWED=NO \
-  test
+xcodebuild -project OutputLens.xcodeproj -scheme OutputLens \
+  -destination 'platform=macOS' -derivedDataPath /private/tmp/output-lens-derived \
+  CODE_SIGNING_ALLOWED=NO test
 ```
 
-### Prototype limitation
+For Option-click, the first launch opens **System Settings → Privacy & Security
+→ Accessibility**; enable Magi and return to Codex or Claude. Clipboard mode
+needs no permission.
 
-Response-container selection is based on the applications' Accessibility trees. Claude's current desktop build exposes the required response containers. Codex still needs live validation on the current build. If either app changes its Accessibility hierarchy, its selection adapter may need an update.
+## Magi for Windows and Linux
 
-See [DESIGN.md](DESIGN.md) for the approved product and connection design.
+The Rust app is the cross-platform **Copy to Magi** reader: start it, then use
+the Copy button on a complete response. The always-on-top reader updates from
+the clipboard with no Accessibility access. It supports selectable text,
+persistent font size, pausing automatic updates, manual **Paste now** capture,
+and a configurable global show/hide shortcut (default **Option-M**). Closing the
+window hides it; the menu-bar icon can show/hide, pause, or quit.
+
+```sh
+cargo run       # run the reader
+cargo test      # unit tests
+```
+
+The Rust reader also builds on macOS (`./scripts/build-macos-app.sh`) if you
+prefer the permission-free reader on its own.
+
+While automatic updates are enabled, any copied text replaces the reader; pause
+updates before copying sensitive text.
+
+## Installing a downloaded macOS build
+
+Release builds are ad-hoc signed, not notarized with an Apple Developer ID, so
+macOS Gatekeeper shows a warning the first time. To open a downloaded `Magi.app`:
+
+- Right-click the app and choose **Open**, then confirm; or
+- clear the quarantine flag once: `xattr -dr com.apple.quarantine /path/to/Magi.app`.
+
+This is expected for an unsigned build and only needs to be done once.
+
+## Documentation
+
+- [DESIGN.md](DESIGN.md) — product and connection design.
+- [plan.md](plan.md) — response-selection and Semi-Code Editor implementation plan.
+- [MIGRATION.md](MIGRATION.md) — the Rust/Swift split and how the apps relate.
+- [PUBLISHING.md](PUBLISHING.md) — release steps.
+
+## License
+
+Magi is released under the [MIT License](LICENSE).

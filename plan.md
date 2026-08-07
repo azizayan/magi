@@ -1,6 +1,6 @@
 # Magi: Response Selection and Semi-Code Editor Plan
 
-Status: proposed implementation plan
+Status: Phases 1–4 implemented (snapshot diagnostics + fixture export, adapter-based response boundaries with no whole-conversation fallback, Semi-Code Editor with direct write-back, and explicit-paste Terminal/iTerm2 support). Phase 5 (native Windows/Linux adapters) remains open, as does live validation against current Codex/Claude and terminal builds using captured fixtures.
 
 ## Problem
 
@@ -256,10 +256,13 @@ Verification: Option-clicking a Codex or Claude input opens its text in Editor m
 
 ### Phase 4: terminal input adapters
 
-- Inspect Terminal and iTerm2 Accessibility behavior.
-- Implement direct write-back where supported.
-- Otherwise implement the explicit paste-required flow.
-- Document platform limitations.
+- Implemented a conservative paste-required adapter for macOS Terminal and
+  iTerm2. Magi starts with an empty draft because terminal Accessibility values
+  commonly contain the whole screen buffer, not just the current command.
+- **Apply** copies the draft, suppresses Magi's clipboard watcher for that
+  self-copy, and returns focus to the terminal. The user performs Paste; Magi
+  never synthesizes Paste or Enter.
+- Live validation against the installed Terminal/iTerm2 versions remains.
 
 Verification: a multiline command can be edited in Magi and returned to each supported terminal without being executed.
 

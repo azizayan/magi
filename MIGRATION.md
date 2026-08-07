@@ -2,12 +2,23 @@
 
 ## Decision
 
-Magi will use a shared Rust desktop application for the permission-free workflow and retain the existing native Swift application until the enhanced macOS workflow reaches feature parity.
+Magi ships as **one app per platform**, not one app per capture method:
 
-The two workflows are intentionally different:
+- **Magi for macOS** is the Swift/AppKit app. It contains *both* capture modes:
+  permission-free **Copy to Magi** (clipboard) and enhanced **Option-click**
+  (Accessibility). macOS users install a single app.
+- **Magi for Windows and Linux** is the Rust/egui app: the cross-platform
+  **Copy to Magi** clipboard reader.
 
-- **Copy to Magi** is the cross-platform default. Copying a complete response in Codex or Claude replaces the reader content. It does not inspect another application's interface and therefore does not need macOS Accessibility permission.
-- **Option-click** is an enhanced macOS workflow. Reading another application's element beneath a global click requires macOS Accessibility APIs. Rewriting that adapter in Rust cannot remove the operating-system permission.
+The two capture *methods* remain intentionally different, and that difference is
+why the codebases stay split by platform rather than merged into one language:
+
+- **Copy to Magi** does not inspect another application's interface, so it needs
+  no macOS Accessibility permission. It is implemented natively on each platform
+  (`NSPasteboard` on macOS, `arboard` in Rust elsewhere).
+- **Option-click** reads another application's element beneath a global click,
+  which requires macOS Accessibility APIs. Rewriting that adapter in Rust cannot
+  remove the operating-system permission, so it lives only in the macOS app.
 
 Screen capture and OCR are not a permission-free substitute: they are less reliable and require screen-capture authorization on macOS.
 
@@ -51,6 +62,9 @@ The current Swift application remains isolated from the Rust app. This avoids a 
 
 4. **Optional native adapters**
    - Port the macOS Accessibility adapter only for users who enable enhanced Option-click mode.
+   - The macOS adapter includes a Semi-Code Editor with direct write-back for
+     settable Codex/Claude inputs and an explicit-paste handoff for Terminal and
+     iTerm2. It never submits prompts or executes terminal commands.
    - Investigate Windows UI Automation and Linux AT-SPI separately; each has platform-specific permissions and application-tree differences.
 
 ## Security and privacy boundary
