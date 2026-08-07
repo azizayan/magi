@@ -125,11 +125,20 @@ final class AccessibilityClient {
         guard var snapshot = captureSnapshot(from: resolvedHitElement, clickPoint: point) else {
             throw AccessibilityClientError.noReadableResponse
         }
-        var targetKind = TargetClassifier.classify(snapshot)
+        let recognizesUnlabeledTerminalSurface = SupportedApplication.isMixedHost(
+            bundleIdentifier: bundleIdentifier
+        )
+        var targetKind = TargetClassifier.classify(
+            snapshot,
+            recognizesUnlabeledTerminalSurface: recognizesUnlabeledTerminalSurface
+        )
         if targetKind == .unsupported,
            let windowSnapshot = captureFocusedWindowSnapshot(applicationPID: pid, clickPoint: point) {
             snapshot = windowSnapshot
-            targetKind = TargetClassifier.classify(snapshot)
+            targetKind = TargetClassifier.classify(
+                snapshot,
+                recognizesUnlabeledTerminalSurface: recognizesUnlabeledTerminalSurface
+            )
         }
         lastRedactedSnapshot = SnapshotRedaction.redacted(snapshot)
         #if DEBUG

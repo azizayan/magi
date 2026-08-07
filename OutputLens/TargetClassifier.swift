@@ -18,12 +18,18 @@ enum TargetClassifier {
 
     /// Editable roles and settable values take priority; otherwise a click
     /// inside readable output enters response selection.
-    static func classify(_ snapshot: TargetSnapshot) -> ClickTargetKind {
+    static func classify(
+        _ snapshot: TargetSnapshot,
+        recognizesUnlabeledTerminalSurface: Bool = false
+    ) -> ClickTargetKind {
         let path = snapshot.hitPath
         guard !path.isEmpty else { return .unsupported }
 
         for node in path.suffix(8).reversed() {
-            if isTerminalSurface(node) {
+            if isTerminalSurface(
+                node,
+                recognizesUnlabeledTerminalSurface: recognizesUnlabeledTerminalSurface
+            ) {
                 return .terminalInput(nodeID: node.id)
             }
         }
@@ -48,13 +54,23 @@ enum TargetClassifier {
         return node.isValueSettable && !neverEditableRoles.contains(node.role)
     }
 
-    static func isTerminalSurface(_ node: SnapshotNode) -> Bool {
+    static func isTerminalSurface(
+        _ node: SnapshotNode,
+        recognizesUnlabeledTerminalSurface: Bool = false
+    ) -> Bool {
         guard editableRoles.contains(node.role) || node.isValueSettable else { return false }
         let label = node.label.lowercased()
         let identifier = node.identifier.lowercased()
-        return label == "terminal"
+        let hasTerminalMarker = label == "terminal"
             || label.hasPrefix("terminal ")
             || label.contains("terminal accessibility")
             || identifier.contains("terminal")
+        if hasTerminalMarker { return true }
+
+        return recognizesUnlabeledTerminalSurface
+            && node.role == "AXTextArea"
+            && !node.isValueSettable
+            && label.isEmpty
+            && identifier.isEmpty
     }
 }
