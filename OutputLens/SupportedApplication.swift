@@ -26,6 +26,15 @@ enum SupportedApplication {
         "org.tabby",
     ]
 
+    static let mixedHostBundleIdentifiers: Set<String> = [
+        "com.microsoft.VSCode",
+        "com.microsoft.VSCodeInsiders",
+        "com.todesktop.230313mzl4w4u92", // Cursor
+        "com.vscodium",
+        "com.codeium.windsurf",
+        "com.google.antigravity",
+    ]
+
     private static let terminalNames: Set<String> = [
         "terminal", "iterm", "iterm2", "warp", "ghostty", "kitty",
         "alacritty", "wezterm", "hyper", "rio", "wave terminal", "tabby",
@@ -33,12 +42,17 @@ enum SupportedApplication {
 
     static func isSupported(bundleIdentifier: String, applicationName: String) -> Bool {
         desktopBundleIdentifiers.contains(bundleIdentifier)
+            || mixedHostBundleIdentifiers.contains(bundleIdentifier)
             || isTerminal(bundleIdentifier: bundleIdentifier, applicationName: applicationName)
     }
 
     static func isTerminal(bundleIdentifier: String, applicationName: String) -> Bool {
         terminalBundleIdentifiers.contains(bundleIdentifier)
             || terminalNames.contains(applicationName.lowercased())
+    }
+
+    static func isMixedHost(bundleIdentifier: String) -> Bool {
+        mixedHostBundleIdentifiers.contains(bundleIdentifier)
     }
 
     /// Accessibility elements rendered by terminal helper processes can report

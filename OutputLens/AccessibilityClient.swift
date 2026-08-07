@@ -47,6 +47,12 @@ final class AccessibilityClient {
     private let chromiumBundleIdentifiers: Set<String> = [
         "com.openai.codex",
         "com.anthropic.claudefordesktop",
+        "com.microsoft.VSCode",
+        "com.microsoft.VSCodeInsiders",
+        "com.todesktop.230313mzl4w4u92",
+        "com.vscodium",
+        "com.codeium.windsurf",
+        "com.google.antigravity",
     ]
     private let systemWideElement = AXUIElementCreateSystemWide()
     private let logger = Logger(subsystem: "com.azizemreayan.OutputLens", category: "TargetSelection")
@@ -111,7 +117,8 @@ final class AccessibilityClient {
             return .editor(try terminalEditorSource(
                 hitElement: resolvedHitElement,
                 applicationPID: pid,
-                applicationName: applicationName
+                applicationName: applicationName,
+                prefersFocusedElement: true
             ))
         }
 
@@ -131,13 +138,29 @@ final class AccessibilityClient {
         #endif
 
         switch targetKind {
+        case .terminalInput(let nodeID):
+            guard let element = elementsByNodeID[nodeID] else {
+                throw AccessibilityClientError.noElement
+            }
+            return .editor(try terminalEditorSource(
+                hitElement: element,
+                applicationPID: pid,
+                applicationName: applicationName,
+                prefersFocusedElement: false
+            ))
         case .editableInput(let nodeID):
+            guard !SupportedApplication.isMixedHost(bundleIdentifier: bundleIdentifier) else {
+                throw AccessibilityClientError.noReadableResponse
+            }
             return .editor(try editorSource(
                 nodeID: nodeID,
                 applicationPID: pid,
                 applicationName: applicationName
             ))
         case .assistantResponse:
+            guard SupportedApplication.desktopBundleIdentifiers.contains(bundleIdentifier) else {
+                throw AccessibilityClientError.noReadableResponse
+            }
             return .response(try responseSnapshot(
                 snapshot,
                 adapter: adapter(for: bundleIdentifier),
@@ -257,16 +280,22 @@ final class AccessibilityClient {
     private func terminalEditorSource(
         hitElement: AXUIElement,
         applicationPID: pid_t,
-        applicationName: String
+        applicationName: String,
+        prefersFocusedElement: Bool
     ) throws -> EditorSource {
         let application = AXUIElementCreateApplication(applicationPID)
-        let focusedElement: AXUIElement = copyAttribute(
+        let focusedElement: AXUIElement? = copyAttribute(
             application,
             kAXFocusedUIElementAttribute as CFString
-        ) ?? hitElement
-        guard let window: AXUIElement = copyAttribute(hitElement, kAXWindowAttribute as CFString)
-                ?? copyAttribute(focusedElement, kAXWindowAttribute as CFString)
-                ?? copyAttribute(application, kAXFocusedWindowAttribute as CFString),
+        )
+        let sourceElement = prefersFocusedElement ? (focusedElement ?? hitElement) : hitElement
+        let focusedWindow: AXUIElement? = focusedElement.flatMap { element in
+            copyAttribute(element, kAXWindowAttribute as CFString)
+        }
+        let sourceWindow: AXUIElement? = copyAttribute(hitElement, kAXWindowAttribute as CFString)
+            ?? focusedWindow
+            ?? copyAttribute(application, kAXFocusedWindowAttribute as CFString)
+        guard let window = sourceWindow,
               let windowFrame = frame(of: window) else {
             throw AccessibilityClientError.noWindow
         }
@@ -274,7 +303,7 @@ final class AccessibilityClient {
         return EditorSource(
             applicationPID: applicationPID,
             applicationName: applicationName,
-            element: focusedElement,
+            element: sourceElement,
             windowElement: window,
             windowFrame: windowFrame,
             capability: .pasteRequired,

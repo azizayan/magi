@@ -32,6 +32,20 @@ final class TargetClassifierTests: XCTestCase {
         XCTAssertEqual(TargetClassifier.classify(snapshot), .editableInput(nodeID: 2))
     }
 
+    func testVSCodeIntegratedTerminalIsClassifiedAsTerminalInput() {
+        let root = SnapshotNode(id: 1, role: "AXGroup", children: [
+            SnapshotNode(
+                id: 2,
+                role: "AXTextField",
+                label: "Terminal 1, zsh Run the command: Toggle Screen Reader Accessibility Mode for an optimized screen reader experience",
+                isValueSettable: true
+            ),
+        ])
+        let snapshot = TargetSnapshot(root: root, hitNodeID: 2, clickPoint: .zero)
+
+        XCTAssertEqual(TargetClassifier.classify(snapshot), .terminalInput(nodeID: 2))
+    }
+
     func testReadableOutputIsClassifiedAsResponse() {
         let root = SnapshotNode(id: 1, role: "AXGroup", children: [
             SnapshotNode(id: 2, role: "AXStaticText", text: "Model output paragraph"),

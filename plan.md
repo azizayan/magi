@@ -191,6 +191,11 @@ workflow independent of whether the session is running Codex CLI, Claude Code,
 or an ordinary shell. Windows Terminal and Linux terminal emulators require
 separate UI Automation and AT-SPI adapters.
 
+Mixed applications are detected at the terminal-surface boundary rather than
+classifying the whole host as a terminal. VS Code, Cursor, VSCodium, Windsurf,
+and Antigravity use their terminal Accessibility description to enter Editor
+mode while source editors, sidebars, and other panels remain unaffected.
+
 ### Editor state
 
 The editor binding stores:

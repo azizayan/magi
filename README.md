@@ -33,6 +33,9 @@ the clicked assistant message in **Reader** mode:
   Kitty, Alacritty, WezTerm, Hyper, Rio, Wave, and Tabby—to open an empty
   **Semi-Code Editor**. This works for Codex CLI, Claude Code, and ordinary
   shell commands because Magi integrates with the terminal host.
+- Integrated terminals in VS Code, Cursor, VSCodium, Windsurf, and Antigravity
+  are recognized by their terminal Accessibility surface; other IDE areas are
+  deliberately left alone.
   **Apply** copies the draft and returns focus to the terminal; the user pastes
   explicitly, so Magi never injects or executes a command.
 - Links in a rendered response are clickable.

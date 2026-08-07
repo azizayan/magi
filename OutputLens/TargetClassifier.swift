@@ -2,6 +2,7 @@ import Foundation
 
 enum ClickTargetKind: Equatable {
     case editableInput(nodeID: Int)
+    case terminalInput(nodeID: Int)
     case assistantResponse
     case unsupported
 }
@@ -21,6 +22,12 @@ enum TargetClassifier {
         let path = snapshot.hitPath
         guard !path.isEmpty else { return .unsupported }
 
+        for node in path.suffix(8).reversed() {
+            if isTerminalSurface(node) {
+                return .terminalInput(nodeID: node.id)
+            }
+        }
+
         for node in path.suffix(4).reversed() {
             if isEditable(node) {
                 return .editableInput(nodeID: node.id)
@@ -39,5 +46,15 @@ enum TargetClassifier {
     static func isEditable(_ node: SnapshotNode) -> Bool {
         if editableRoles.contains(node.role) { return true }
         return node.isValueSettable && !neverEditableRoles.contains(node.role)
+    }
+
+    static func isTerminalSurface(_ node: SnapshotNode) -> Bool {
+        guard editableRoles.contains(node.role) || node.isValueSettable else { return false }
+        let label = node.label.lowercased()
+        let identifier = node.identifier.lowercased()
+        return label == "terminal"
+            || label.hasPrefix("terminal ")
+            || label.contains("terminal accessibility")
+            || identifier.contains("terminal")
     }
 }

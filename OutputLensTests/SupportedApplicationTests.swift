@@ -23,6 +23,18 @@ final class SupportedApplicationTests: XCTestCase {
         ))
     }
 
+    func testVSCodeIsRecognizedAsMixedTerminalHost() {
+        XCTAssertTrue(SupportedApplication.isSupported(
+            bundleIdentifier: "com.microsoft.VSCode",
+            applicationName: "Code"
+        ))
+        XCTAssertTrue(SupportedApplication.isMixedHost(bundleIdentifier: "com.microsoft.VSCode"))
+        XCTAssertFalse(SupportedApplication.isTerminal(
+            bundleIdentifier: "com.microsoft.VSCode",
+            applicationName: "Code"
+        ))
+    }
+
     func testTerminalHelperResolvesToSupportedParentApplication() {
         let warp = ApplicationIdentity(
             processIdentifier: 822,
