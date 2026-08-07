@@ -286,6 +286,40 @@ final class ResponseSelectionTests: XCTestCase {
         )
     }
 
+    func testCollapsedOffscreenFramesDoNotSplitClickedResponseIntoOneSentence() {
+        var children = (0..<10).map { index in
+            SnapshotNode(
+                id: 100 + index,
+                role: "AXStaticText",
+                text: "Offscreen turn \(index)",
+                frame: CGRect(x: 20, y: 81, width: 600, height: 0)
+            )
+        }
+        children += [
+            paragraph(id: 10, "User prompt", y: 277, height: 60),
+            copyButton(id: 11, label: "Copy message", y: 352),
+            paragraph(id: 20, "Whole response starts here", y: 441, height: 16),
+            paragraph(id: 21, "Clicked sentence", y: 474, height: 16),
+            paragraph(id: 22, "Response continues", y: 506, height: 16),
+            paragraph(id: 23, "Response finishes", y: 538, height: 16),
+            copyButton(id: 24, y: 600),
+        ]
+        let root = SnapshotNode(
+            id: 1,
+            role: "AXGroup",
+            frame: CGRect(x: 0, y: 80, width: 640, height: 560),
+            children: children
+        )
+        let fixture = TargetSnapshot(root: root, hitNodeID: 21, clickPoint: CGPoint(x: 100, y: 478))
+
+        let resolution = ResponseSelection.resolve(snapshot: fixture, adapter: adapter)
+
+        XCTAssertEqual(
+            resolution?.text,
+            "Whole response starts here\nClicked sentence\nResponse continues\nResponse finishes"
+        )
+    }
+
     func testVeryLongSingleResponseIsSelectedWhole() {
         let prompt = SnapshotNode(id: 10, role: "AXGroup", frame: CGRect(x: 20, y: 100, width: 600, height: 60), children: [
             paragraph(id: 11, "Short user prompt", y: 100),

@@ -103,29 +103,6 @@ final class ReaderPanelController: NSWindowController, NSWindowDelegate, NSTextV
         window?.orderFrontRegardless()
     }
 
-    /// Display text captured from the clipboard ("Copy to Magi"). There is no
-    /// streaming source to attach to, so the panel is not bound to a window.
-    func showClipboardText(_ text: String) {
-        setMode(.reader)
-        lastPromptContext = nil
-        updatePromptToggleVisibility()
-        let wasNearBottom = isNearBottom
-        if text != lastText {
-            textView.textStorage?.setAttributedString(renderReaderContent(response: text))
-            lastText = text
-            if wasNearBottom {
-                textView.scrollToEndOfDocument(nil)
-            }
-        }
-        stateLabel.stringValue = "From clipboard"
-        stateLabel.textColor = .secondaryLabelColor
-        stateIndicator.textColor = .systemBlue
-        if window?.isVisible != true {
-            window?.center()
-        }
-        window?.orderFrontRegardless()
-    }
-
     /// Report a selection failure without discarding the currently displayed
     /// content: an ambiguous boundary must never replace a good response.
     func showSelectionFailure(_ message: String) {

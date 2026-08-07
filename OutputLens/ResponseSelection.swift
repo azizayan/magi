@@ -268,6 +268,15 @@ enum ResponseSelection {
             if seen.insert(messageID).inserted { messageIDs.append(messageID) }
         }
 
+        // A flat Chromium tree can place response controls and individual text
+        // fragments directly under the same parent. In that shape the button
+        // itself is not a message turn; treating every sibling as one turn is
+        // what reduced a click to a single sentence.
+        guard messageIDs.allSatisfy({ id in
+            guard let node = byID[id] else { return false }
+            return !isControlButton(node, markers: markers)
+        }) else { return nil }
+
         var parentCounts: [Int: Int] = [:]
         for id in messageIDs {
             if let listID = parent[id] { parentCounts[listID, default: 0] += 1 }
@@ -484,7 +493,12 @@ enum ResponseSelection {
     /// Y positions where a vertical whitespace gap is large enough to be a turn
     /// separator rather than ordinary paragraph spacing.
     static func turnGapBoundaries(_ fragments: [ResponseTextFragment]) -> [CGFloat] {
-        let framed = fragments.compactMap(\.frame).sorted { $0.minY < $1.minY }
+        // Virtualized Chromium trees retain offscreen nodes with zero-height
+        // frames. Including those collapses the median and makes ordinary
+        // paragraph spacing look like a turn boundary.
+        let framed = fragments.compactMap(\.frame)
+            .filter { $0.height >= realFrameHeight }
+            .sorted { $0.minY < $1.minY }
         guard framed.count >= 2 else { return [] }
 
         let medianHeight = median(framed.map(\.height)) ?? 16

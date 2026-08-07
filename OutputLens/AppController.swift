@@ -13,7 +13,6 @@ final class AppController: NSObject {
     ]
 
     private let accessibility = AccessibilityClient()
-    private let clipboardReader = ClipboardReader()
     private let readerPanel = ReaderPanelController()
     private let sourceHighlight = SourceHighlightController()
     private let statusItem = NSStatusBar.system.statusItem(withLength: NSStatusItem.variableLength)
@@ -22,10 +21,7 @@ final class AppController: NSObject {
     private var binding: ResponseBinding?
     private var editorBinding: EditorBinding?
     private var sourceApplicationPID: pid_t?
-    private var clipboardText = ""
-    private var forceNextClipboard = false
     private var hasPromptedForAccessibility = false
-    private var clipboardWatching = UserDefaults.standard.bool(forKey: "clipboardWatching")
     private var enabled = true
     private var trigger = Trigger.load()
 
@@ -42,12 +38,6 @@ final class AppController: NSObject {
         }
         readerPanel.onEditorDraftChange = { [weak self] draft in
             self?.editorBinding?.updateDraft(draft)
-        }
-        clipboardReader.onNewText = { [weak self] text in
-            self?.handleClipboardText(text)
-        }
-        if clipboardWatching {
-            clipboardReader.startWatching()
         }
         configureStatusItem()
         installEventMonitor()
@@ -71,20 +61,6 @@ final class AppController: NSObject {
         let enabledItem = NSMenuItem(title: enabled ? "Disable Magi" : "Enable Magi", action: #selector(toggleEnabled), keyEquivalent: "")
         enabledItem.target = self
         menu.addItem(enabledItem)
-
-        menu.addItem(.separator())
-        let clipboardHeading = NSMenuItem(title: "Copy to Magi (no permission)", action: nil, keyEquivalent: "")
-        clipboardHeading.isEnabled = false
-        menu.addItem(clipboardHeading)
-
-        let watchItem = NSMenuItem(title: "Watch Clipboard", action: #selector(toggleClipboardWatching), keyEquivalent: "")
-        watchItem.target = self
-        watchItem.state = clipboardWatching ? .on : .off
-        menu.addItem(watchItem)
-
-        let pasteItem = NSMenuItem(title: "Show Clipboard Now", action: #selector(showClipboardNow), keyEquivalent: "")
-        pasteItem.target = self
-        menu.addItem(pasteItem)
 
         menu.addItem(.separator())
         let heading = NSMenuItem(title: "Option-Click (needs Accessibility)", action: nil, keyEquivalent: "")
@@ -123,10 +99,10 @@ final class AppController: NSObject {
     /// Ask macOS to show the Accessibility prompt, but only when the user
     /// actually invokes Option-click without the permission — never at launch,
     /// and only once per session so we do not re-open the dialog on every
-    /// click. Clipboard capture never reaches here because it needs no access.
+    /// click.
     private func promptForAccessibilityIfNeeded() {
         if hasPromptedForAccessibility {
-            readerPanel.showMessage("Option-click needs Accessibility access. Choose “Open Accessibility Settings…” from the Magi menu, enable Magi, then try again. Copy to Magi works without it.")
+            readerPanel.showMessage("Option-click needs Accessibility access. Choose “Open Accessibility Settings…” from the Magi menu, enable Magi, then try again.")
             return
         }
         hasPromptedForAccessibility = true
@@ -213,7 +189,6 @@ final class AppController: NSObject {
         case .applied:
             readerPanel.showEditorStatus("Applied to \(editorBinding.source.applicationName). Nothing was submitted.", isError: false)
         case .copiedForPaste:
-            clipboardReader.ignoreCurrentChange()
             accessibility.focus(editorBinding.source.element)
             NSRunningApplication(processIdentifier: editorBinding.source.applicationPID)?.activate()
             readerPanel.showEditorStatus("Copied. Paste in \(editorBinding.source.applicationName) when ready; nothing was executed.", isError: false)
@@ -222,42 +197,9 @@ final class AppController: NSObject {
         }
     }
 
-    private func handleClipboardText(_ text: String) {
-        guard enabled else { return }
-        // Ignore a selection the user copied out of the reader itself, which
-        // would otherwise replace the response with a fragment of itself.
-        // An explicit "Show Clipboard Now" bypasses this guard.
-        if !forceNextClipboard, !clipboardText.isEmpty, clipboardText.contains(text) { return }
-        clipboardText = text
-        clearBindings()
-        sourceApplicationPID = nil
-        sourceHighlight.hide()
-        readerPanel.showClipboardText(text)
-    }
-
-    @objc private func toggleClipboardWatching() {
-        clipboardWatching.toggle()
-        UserDefaults.standard.set(clipboardWatching, forKey: "clipboardWatching")
-        if clipboardWatching, enabled {
-            clipboardReader.startWatching()
-        } else {
-            clipboardReader.stopWatching()
-        }
-        rebuildMenu()
-    }
-
-    @objc private func showClipboardNow() {
-        forceNextClipboard = true
-        clipboardReader.captureNow()
-        forceNextClipboard = false
-    }
-
     @objc private func toggleEnabled() {
         enabled.toggle()
-        if enabled {
-            if clipboardWatching { clipboardReader.startWatching() }
-        } else {
-            clipboardReader.stopWatching()
+        if !enabled {
             clearReadingSession()
             readerPanel.close()
         }

@@ -6,24 +6,14 @@ source application.
 
 There is one Magi product with a native app per platform:
 
-- **Magi for macOS** (Swift/AppKit) — a menu-bar app with two capture modes:
-  permission-free **Copy to Magi** (clipboard) and enhanced **Option-click**
-  (reads the exact response through Accessibility). One download, one app.
+- **Magi for macOS** (Swift/AppKit) — a menu-bar app activated only by
+  **Option-click**, which reads the exact response through Accessibility.
 - **Magi for Windows and Linux** (Rust/egui) — the cross-platform **Copy to
   Magi** clipboard reader. No Accessibility permission required.
 
 Extracted text always stays on the local machine.
 
 ## Magi for macOS
-
-The macOS app works with no permission at all through the clipboard, and offers
-a richer Option-click mode when you grant Accessibility access.
-
-**Copy to Magi (no permission).** Enable *Watch Clipboard* from the menu-bar
-icon, then use the Copy button on a complete Codex or Claude response; the
-reader shows it. *Show Clipboard Now* captures on demand. Pre-existing clipboard
-content is never shown automatically, and copying a selection out of the reader
-does not replace the response.
 
 **Option-click (needs Accessibility).** Option-click a response to open exactly
 the clicked assistant message in **Reader** mode:
@@ -63,8 +53,7 @@ xcodebuild -project OutputLens.xcodeproj -scheme OutputLens \
 ```
 
 For Option-click, the first launch opens **System Settings → Privacy & Security
-→ Accessibility**; enable Magi and return to Codex or Claude. Clipboard mode
-needs no permission.
+→ Accessibility**; enable Magi and return to Codex or Claude.
 
 ## Magi for Windows and Linux
 
