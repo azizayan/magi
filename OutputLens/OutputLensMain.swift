@@ -8,6 +8,7 @@ enum OutputLensMain {
         let delegate = AppDelegate()
         application.delegate = delegate
         application.setActivationPolicy(.accessory)
+        application.mainMenu = ApplicationMenu.make()
         application.run()
         withExtendedLifetime(delegate) {}
     }
@@ -22,4 +23,3 @@ final class AppDelegate: NSObject, NSApplicationDelegate {
         controller?.start()
     }
 }
-

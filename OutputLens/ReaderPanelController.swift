@@ -132,6 +132,7 @@ final class ReaderPanelController: NSWindowController, NSWindowDelegate, NSTextV
         if let frame = Self.panelFrame(attachedTo: accessibilityFrame) {
             window?.setFrame(frame, display: true, animate: window?.isVisible == true)
         }
+        NSApplication.shared.activate(ignoringOtherApps: true)
         window?.orderFrontRegardless()
         window?.makeKeyAndOrderFront(nil)
         window?.makeFirstResponder(textView)
