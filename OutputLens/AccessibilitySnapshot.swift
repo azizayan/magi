@@ -72,6 +72,37 @@ extension SnapshotNode {
     func contains(nodeID: Int) -> Bool {
         node(withID: nodeID) != nil
     }
+
+    /// Find the deepest useful node whose frame contains the click. Some
+    /// Electron builds return a detached scroll area from system hit-testing;
+    /// a focused-window snapshot still exposes the real text descendants.
+    func bestHitNodeID(at point: CGPoint) -> Int? {
+        var bestMeaningful: (id: Int, depth: Int, area: CGFloat)?
+        var bestAny: (id: Int, depth: Int, area: CGFloat)?
+
+        func consider(_ candidate: inout (id: Int, depth: Int, area: CGFloat)?, node: SnapshotNode, depth: Int) {
+            let area = max(0, node.frame?.width ?? 0) * max(0, node.frame?.height ?? 0)
+            if let current = candidate,
+               current.depth > depth || (current.depth == depth && current.area <= area) {
+                return
+            }
+            candidate = (node.id, depth, area)
+        }
+
+        func walk(_ node: SnapshotNode, depth: Int) {
+            guard node.frame?.contains(point) == true else { return }
+            consider(&bestAny, node: node, depth: depth)
+            if !node.text.isEmpty || node.isValueSettable || TargetClassifier.editableRoles.contains(node.role) {
+                consider(&bestMeaningful, node: node, depth: depth)
+            }
+            for child in node.children {
+                walk(child, depth: depth + 1)
+            }
+        }
+
+        walk(self, depth: 0)
+        return bestMeaningful?.id ?? bestAny?.id
+    }
 }
 
 extension TargetSnapshot {

@@ -71,8 +71,14 @@ final class AccessibilityClient {
             throw AccessibilityClientError.unsupportedApplication
         }
 
-        guard let snapshot = captureSnapshot(from: hitElement, clickPoint: point) else {
+        guard var snapshot = captureSnapshot(from: hitElement, clickPoint: point) else {
             throw AccessibilityClientError.noReadableResponse
+        }
+        var targetKind = TargetClassifier.classify(snapshot)
+        if targetKind == .unsupported,
+           let windowSnapshot = captureFocusedWindowSnapshot(applicationPID: pid, clickPoint: point) {
+            snapshot = windowSnapshot
+            targetKind = TargetClassifier.classify(snapshot)
         }
         lastRedactedSnapshot = SnapshotRedaction.redacted(snapshot)
         #if DEBUG
@@ -80,7 +86,7 @@ final class AccessibilityClient {
         autoSaveFixture(lastRedactedSnapshot!)
         #endif
 
-        switch TargetClassifier.classify(snapshot) {
+        switch targetKind {
         case .editableInput(let nodeID):
             return .editor(try editorSource(
                 nodeID: nodeID,
@@ -214,6 +220,22 @@ final class AccessibilityClient {
         return nil
     }
 
+    /// Fallback for Electron hit-testing that returns a detached AXScrollArea
+    /// with no parent or children. Snapshot the focused window, then derive the
+    /// real hit node geometrically from its readable/editable descendants.
+    private func captureFocusedWindowSnapshot(applicationPID: pid_t, clickPoint: CGPoint) -> TargetSnapshot? {
+        let application = AXUIElementCreateApplication(applicationPID)
+        guard let window: AXUIElement = copyAttribute(application, kAXFocusedWindowAttribute as CFString) else {
+            return nil
+        }
+
+        var builder = SnapshotBuilder(hitElement: window, budget: 6000)
+        guard let root = build(window, depth: 0, builder: &builder),
+              let hitNodeID = root.bestHitNodeID(at: clickPoint) else { return nil }
+        elementsByNodeID = builder.elements
+        return TargetSnapshot(root: root, hitNodeID: hitNodeID, clickPoint: clickPoint)
+    }
+
     private struct SnapshotBuilder {
         let hitElement: AXUIElement
         var budget: Int
@@ -257,12 +279,10 @@ final class AccessibilityClient {
         let settable = TargetClassifier.editableRoles.contains(role) && isValueSettable(element)
 
         var childNodes: [SnapshotNode] = []
-        if let children: [AXUIElement] = copyAttribute(element, kAXChildrenAttribute as CFString) {
-            for child in children {
-                guard builder.budget > 0 else { break }
-                if let childNode = build(child, depth: depth + 1, builder: &builder) {
-                    childNodes.append(childNode)
-                }
+        for child in children(of: element) {
+            guard builder.budget > 0 else { break }
+            if let childNode = build(child, depth: depth + 1, builder: &builder) {
+                childNodes.append(childNode)
             }
         }
 
@@ -280,6 +300,21 @@ final class AccessibilityClient {
     }
 
     // MARK: - Element helpers
+
+    private func children(of element: AXUIElement) -> [AXUIElement] {
+        let attributes: [CFString] = [
+            kAXChildrenAttribute as CFString,
+            kAXVisibleChildrenAttribute as CFString,
+            "AXContents" as CFString,
+            "AXRows" as CFString,
+        ]
+        for attribute in attributes {
+            if let children: [AXUIElement] = copyAttribute(element, attribute), !children.isEmpty {
+                return children
+            }
+        }
+        return []
+    }
 
     func frame(of element: AXUIElement) -> CGRect? {
         guard let positionValue: AXValue = copyAttribute(element, kAXPositionAttribute as CFString),

@@ -58,4 +58,26 @@ final class TargetClassifierTests: XCTestCase {
 
         XCTAssertEqual(TargetClassifier.classify(snapshot), .assistantResponse)
     }
+
+    func testWindowFallbackFindsReadableNodeAtClickInsteadOfScrollArea() {
+        let root = SnapshotNode(
+            id: 1,
+            role: "AXWindow",
+            frame: CGRect(x: 0, y: 0, width: 800, height: 800),
+            children: [
+                SnapshotNode(
+                    id: 2,
+                    role: "AXScrollArea",
+                    frame: CGRect(x: 100, y: 100, width: 600, height: 600),
+                    children: [
+                        SnapshotNode(id: 3, role: "AXStaticText", text: "Earlier response", frame: CGRect(x: 140, y: 160, width: 500, height: 80)),
+                        SnapshotNode(id: 4, role: "AXStaticText", text: "Clicked response", frame: CGRect(x: 140, y: 320, width: 500, height: 80)),
+                        SnapshotNode(id: 5, role: "AXGroup", frame: CGRect(x: 100, y: 100, width: 600, height: 600)),
+                    ]
+                ),
+            ]
+        )
+
+        XCTAssertEqual(root.bestHitNodeID(at: CGPoint(x: 300, y: 350)), 4)
+    }
 }
