@@ -185,7 +185,11 @@ Use two adapter paths:
 - **Direct input adapter:** for Codex, Claude, and terminals that expose a settable text value.
 - **Paste adapter:** for terminals without direct write-back. Applying copies the edited text, focuses the original terminal, and requests an explicit user Paste action. Automatic synthetic paste should not be the default.
 
-Terminal support should begin with macOS Terminal and iTerm2 validation. Windows Terminal and Linux terminal emulators require separate UI Automation and AT-SPI adapters.
+The macOS adapter recognizes Terminal, iTerm2, Warp, Ghostty, Kitty, Alacritty,
+WezTerm, Hyper, Rio, Wave, and Tabby at the host-app boundary. This makes the
+workflow independent of whether the session is running Codex CLI, Claude Code,
+or an ordinary shell. Windows Terminal and Linux terminal emulators require
+separate UI Automation and AT-SPI adapters.
 
 ### Editor state
 
@@ -256,13 +260,13 @@ Verification: Option-clicking a Codex or Claude input opens its text in Editor m
 
 ### Phase 4: terminal input adapters
 
-- Implemented a conservative paste-required adapter for macOS Terminal and
-  iTerm2. Magi starts with an empty draft because terminal Accessibility values
+- Implemented a conservative paste-required adapter for common macOS terminal
+  hosts. Magi starts with an empty draft because terminal Accessibility values
   commonly contain the whole screen buffer, not just the current command.
 - **Apply** copies the draft, suppresses Magi's clipboard watcher for that
   self-copy, and returns focus to the terminal. The user performs Paste; Magi
   never synthesizes Paste or Enter.
-- Live validation against the installed Terminal/iTerm2 versions remains.
+- Live validation against the installed terminal versions remains.
 
 Verification: a multiline command can be edited in Magi and returned to each supported terminal without being executed.
 

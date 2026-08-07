@@ -5,13 +5,6 @@ import OSLog
 @MainActor
 final class AppController: NSObject {
     private let logger = Logger(subsystem: "com.azizemreayan.OutputLens", category: "AppController")
-    private let supportedBundleIdentifiers = [
-        "com.openai.codex",
-        "com.anthropic.claudefordesktop",
-        "com.apple.Terminal",
-        "com.googlecode.iterm2",
-    ]
-
     private let accessibility = AccessibilityClient()
     private let readerPanel = ReaderPanelController()
     private let sourceHighlight = SourceHighlightController()
@@ -131,7 +124,7 @@ final class AppController: NSObject {
 
     private func resolveTarget(at point: CGPoint, retryIfUnavailable: Bool = false) {
         do {
-            switch try accessibility.target(at: point, supportedBundleIdentifiers: supportedBundleIdentifiers) {
+            switch try accessibility.target(at: point) {
             case .response(let snapshot):
                 startReading(snapshot)
             case .editor(let source):
@@ -153,7 +146,10 @@ final class AppController: NSObject {
         guard AXIsProcessTrusted() else { return }
         for application in NSWorkspace.shared.runningApplications {
             guard let bundleIdentifier = application.bundleIdentifier,
-                  supportedBundleIdentifiers.contains(bundleIdentifier) else { continue }
+                  SupportedApplication.isSupported(
+                    bundleIdentifier: bundleIdentifier,
+                    applicationName: application.localizedName ?? bundleIdentifier
+                  ) else { continue }
             accessibility.prepareApplicationAccessibility(
                 applicationPID: application.processIdentifier,
                 bundleIdentifier: bundleIdentifier
@@ -189,8 +185,8 @@ final class AppController: NSObject {
         case .applied:
             readerPanel.showEditorStatus("Applied to \(editorBinding.source.applicationName). Nothing was submitted.", isError: false)
         case .copiedForPaste:
-            accessibility.focus(editorBinding.source.element)
             NSRunningApplication(processIdentifier: editorBinding.source.applicationPID)?.activate()
+            accessibility.focus(editorBinding.source.element)
             readerPanel.showEditorStatus("Copied. Paste in \(editorBinding.source.applicationName) when ready; nothing was executed.", isError: false)
         case .failed(let reason):
             readerPanel.showEditorStatus(reason, isError: true)
@@ -256,8 +252,12 @@ final class AppController: NSObject {
 
     @objc private func applicationDidActivate(_ notification: Notification) {
         guard let runningApplication = notification.userInfo?[NSWorkspace.applicationUserInfoKey] as? NSRunningApplication else { return }
+        guard runningApplication.processIdentifier != ProcessInfo.processInfo.processIdentifier else { return }
         if let bundleIdentifier = runningApplication.bundleIdentifier,
-           supportedBundleIdentifiers.contains(bundleIdentifier),
+           SupportedApplication.isSupported(
+            bundleIdentifier: bundleIdentifier,
+            applicationName: runningApplication.localizedName ?? bundleIdentifier
+           ),
            AXIsProcessTrusted() {
             accessibility.prepareApplicationAccessibility(
                 applicationPID: runningApplication.processIdentifier,

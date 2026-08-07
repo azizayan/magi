@@ -29,7 +29,10 @@ the clicked assistant message in **Reader** mode:
 - Option-click an editable input to open **Editor** mode: a large monospaced
   draft whose **Apply to Input** writes back through Accessibility and never
   submits or runs anything. Drafts survive a lost source element.
-- Option-click macOS Terminal or iTerm2 to open an empty **Semi-Code Editor**.
+- Option-click a supported terminal—including Terminal, iTerm2, Warp, Ghostty,
+  Kitty, Alacritty, WezTerm, Hyper, Rio, Wave, and Tabby—to open an empty
+  **Semi-Code Editor**. This works for Codex CLI, Claude Code, and ordinary
+  shell commands because Magi integrates with the terminal host.
   **Apply** copies the draft and returns focus to the terminal; the user pastes
   explicitly, so Magi never injects or executes a command.
 - Links in a rendered response are clickable.

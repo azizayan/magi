@@ -11,6 +11,7 @@
 		2E91A1E391CDC0138BD23170 /* AccessibilityClient.swift in Sources */ = {isa = PBXBuildFile; fileRef = A0994C4118909E20D3E3BECB /* AccessibilityClient.swift */; };
 		2EB51CE98C265C6C0A21C8C4 /* ApplicationMenu.swift in Sources */ = {isa = PBXBuildFile; fileRef = C2544342DD3B68E5AD194ADD /* ApplicationMenu.swift */; };
 		32D85A96533AF452D58B7AD1 /* TargetClassifierTests.swift in Sources */ = {isa = PBXBuildFile; fileRef = D0FB5E2D40F77EAFFA339571 /* TargetClassifierTests.swift */; };
+		4EE28547F438F0EF1ECE7453 /* SupportedApplication.swift in Sources */ = {isa = PBXBuildFile; fileRef = 360B03F31401DDA4C6204275 /* SupportedApplication.swift */; };
 		5E6B457EF6EAE4ED0932EEF9 /* ApplicationMenuTests.swift in Sources */ = {isa = PBXBuildFile; fileRef = 36B66AE534E4375B604BE541 /* ApplicationMenuTests.swift */; };
 		6C11577B30873302A755A397 /* AppController.swift in Sources */ = {isa = PBXBuildFile; fileRef = 269997A9AC975BCD98ED4884 /* AppController.swift */; };
 		74EE743EB989EF08C8F44964 /* ReaderPanelController.swift in Sources */ = {isa = PBXBuildFile; fileRef = C4CFB5219F2B8E65EAD29A82 /* ReaderPanelController.swift */; };
@@ -22,6 +23,7 @@
 		A5269A5B9FD1F23E66918576 /* EditorBindingTests.swift in Sources */ = {isa = PBXBuildFile; fileRef = 10C0903B2A61AD5E4D59FC3A /* EditorBindingTests.swift */; };
 		ABC2BC2F39FB9DC5EE0ECC9D /* ResponseHeuristicsTests.swift in Sources */ = {isa = PBXBuildFile; fileRef = 9261278723D67066974951C4 /* ResponseHeuristicsTests.swift */; };
 		AFFA4FC149B1F874B422C3C2 /* EditorBinding.swift in Sources */ = {isa = PBXBuildFile; fileRef = 363F5047BB64E31A1B933CAB /* EditorBinding.swift */; };
+		CEFAF89BE87589537683792C /* SupportedApplicationTests.swift in Sources */ = {isa = PBXBuildFile; fileRef = A95AF1A2A89164A44BD8BEF6 /* SupportedApplicationTests.swift */; };
 		DFACB8FDAFF8C16A2CB3A411 /* ReaderPanelControllerTests.swift in Sources */ = {isa = PBXBuildFile; fileRef = 138ABC9B85A26BF0D010369C /* ReaderPanelControllerTests.swift */; };
 		E6F1AC3C3EEE1974DD239A02 /* AccessibilitySnapshot.swift in Sources */ = {isa = PBXBuildFile; fileRef = 7ED24E299A2EFED2CEAC5D22 /* AccessibilitySnapshot.swift */; };
 		F0AE9D8380738B18D9195CFD /* OutputLensMain.swift in Sources */ = {isa = PBXBuildFile; fileRef = BCDD238B5F68A8F3E22B06B3 /* OutputLensMain.swift */; };
@@ -43,6 +45,7 @@
 		138ABC9B85A26BF0D010369C /* ReaderPanelControllerTests.swift */ = {isa = PBXFileReference; lastKnownFileType = sourcecode.swift; path = ReaderPanelControllerTests.swift; sourceTree = "<group>"; };
 		17692F4C8F1D4B3969571743 /* ResponseSelection.swift */ = {isa = PBXFileReference; lastKnownFileType = sourcecode.swift; path = ResponseSelection.swift; sourceTree = "<group>"; };
 		269997A9AC975BCD98ED4884 /* AppController.swift */ = {isa = PBXFileReference; lastKnownFileType = sourcecode.swift; path = AppController.swift; sourceTree = "<group>"; };
+		360B03F31401DDA4C6204275 /* SupportedApplication.swift */ = {isa = PBXFileReference; lastKnownFileType = sourcecode.swift; path = SupportedApplication.swift; sourceTree = "<group>"; };
 		363F5047BB64E31A1B933CAB /* EditorBinding.swift */ = {isa = PBXFileReference; lastKnownFileType = sourcecode.swift; path = EditorBinding.swift; sourceTree = "<group>"; };
 		36B66AE534E4375B604BE541 /* ApplicationMenuTests.swift */ = {isa = PBXFileReference; lastKnownFileType = sourcecode.swift; path = ApplicationMenuTests.swift; sourceTree = "<group>"; };
 		3E64D34F33129ECD8EF038B9 /* Info.plist */ = {isa = PBXFileReference; lastKnownFileType = text.plist; path = Info.plist; sourceTree = "<group>"; };
@@ -53,6 +56,7 @@
 		9261278723D67066974951C4 /* ResponseHeuristicsTests.swift */ = {isa = PBXFileReference; lastKnownFileType = sourcecode.swift; path = ResponseHeuristicsTests.swift; sourceTree = "<group>"; };
 		A0994C4118909E20D3E3BECB /* AccessibilityClient.swift */ = {isa = PBXFileReference; lastKnownFileType = sourcecode.swift; path = AccessibilityClient.swift; sourceTree = "<group>"; };
 		A844EB8EA0FE5B1C251AE71D /* OutputLensTests.xctest */ = {isa = PBXFileReference; explicitFileType = wrapper.cfbundle; includeInIndex = 0; path = OutputLensTests.xctest; sourceTree = BUILT_PRODUCTS_DIR; };
+		A95AF1A2A89164A44BD8BEF6 /* SupportedApplicationTests.swift */ = {isa = PBXFileReference; lastKnownFileType = sourcecode.swift; path = SupportedApplicationTests.swift; sourceTree = "<group>"; };
 		B7EF185BC824B6767E40B2CB /* ResponseSelectionTests.swift */ = {isa = PBXFileReference; lastKnownFileType = sourcecode.swift; path = ResponseSelectionTests.swift; sourceTree = "<group>"; };
 		BCDD238B5F68A8F3E22B06B3 /* OutputLensMain.swift */ = {isa = PBXFileReference; lastKnownFileType = sourcecode.swift; path = OutputLensMain.swift; sourceTree = "<group>"; };
 		BE2A8B53C501D8BD0B79DE63 /* ResponseBinding.swift */ = {isa = PBXFileReference; lastKnownFileType = sourcecode.swift; path = ResponseBinding.swift; sourceTree = "<group>"; };
@@ -77,6 +81,7 @@
 				4E463BFD81A003A0C3783B23 /* ResponseHeuristics.swift */,
 				17692F4C8F1D4B3969571743 /* ResponseSelection.swift */,
 				68078D74B8A5799FE5744438 /* SourceHighlightController.swift */,
+				360B03F31401DDA4C6204275 /* SupportedApplication.swift */,
 				0533521A6EA372A8E051ED38 /* TargetClassifier.swift */,
 			);
 			path = OutputLens;
@@ -108,6 +113,7 @@
 				138ABC9B85A26BF0D010369C /* ReaderPanelControllerTests.swift */,
 				9261278723D67066974951C4 /* ResponseHeuristicsTests.swift */,
 				B7EF185BC824B6767E40B2CB /* ResponseSelectionTests.swift */,
+				A95AF1A2A89164A44BD8BEF6 /* SupportedApplicationTests.swift */,
 				D0FB5E2D40F77EAFFA339571 /* TargetClassifierTests.swift */,
 			);
 			path = OutputLensTests;
@@ -198,6 +204,7 @@
 				050C4112F9C38309BCD50330 /* ResponseHeuristics.swift in Sources */,
 				78D01E7057973075CF375A3E /* ResponseSelection.swift in Sources */,
 				8C06C4682473C86FE9BB99A6 /* SourceHighlightController.swift in Sources */,
+				4EE28547F438F0EF1ECE7453 /* SupportedApplication.swift in Sources */,
 				7A6623BE77EEDCE3EF0D204C /* TargetClassifier.swift in Sources */,
 			);
 			runOnlyForDeploymentPostprocessing = 0;
@@ -211,6 +218,7 @@
 				DFACB8FDAFF8C16A2CB3A411 /* ReaderPanelControllerTests.swift in Sources */,
 				ABC2BC2F39FB9DC5EE0ECC9D /* ResponseHeuristicsTests.swift in Sources */,
 				82560EF189E8E3D96385EEDB /* ResponseSelectionTests.swift in Sources */,
+				CEFAF89BE87589537683792C /* SupportedApplicationTests.swift in Sources */,
 				32D85A96533AF452D58B7AD1 /* TargetClassifierTests.swift in Sources */,
 			);
 			runOnlyForDeploymentPostprocessing = 0;

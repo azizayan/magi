@@ -31,7 +31,7 @@ enum AccessibilityClientError: LocalizedError {
         case .noElement:
             "Magi could not find anything at that point."
         case .unsupportedApplication:
-            "Option-click inside the Codex or Claude desktop app."
+            "Option-click inside Codex, Claude, or a supported terminal app."
         case .noReadableResponse:
             "That item does not expose readable content. Try clicking directly on its text."
         case .responseBoundaryNotIdentified:
@@ -47,10 +47,6 @@ final class AccessibilityClient {
         "com.openai.codex",
         "com.anthropic.claudefordesktop",
     ]
-    private let terminalBundleIdentifiers: Set<String> = [
-        "com.apple.Terminal",
-        "com.googlecode.iterm2",
-    ]
     private let systemWideElement = AXUIElementCreateSystemWide()
     private let logger = Logger(subsystem: "com.azizemreayan.OutputLens", category: "TargetSelection")
     private var preparedApplicationPIDs: Set<pid_t> = []
@@ -61,7 +57,7 @@ final class AccessibilityClient {
 
     // MARK: - Target resolution
 
-    func target(at point: CGPoint, supportedBundleIdentifiers: [String]) throws -> ResolvedTarget {
+    func target(at point: CGPoint) throws -> ResolvedTarget {
         var hitElement: AXUIElement?
         guard AXUIElementCopyElementAtPosition(systemWideElement, Float(point.x), Float(point.y), &hitElement) == .success,
               let hitElement else {
@@ -76,7 +72,11 @@ final class AccessibilityClient {
             logger.error("Hit element has no application pid=\(pid, privacy: .public)")
             throw AccessibilityClientError.unsupportedApplication
         }
-        guard supportedBundleIdentifiers.contains(bundleIdentifier) else {
+        let applicationName = runningApplication?.localizedName ?? bundleIdentifier
+        guard SupportedApplication.isSupported(
+            bundleIdentifier: bundleIdentifier,
+            applicationName: applicationName
+        ) else {
             logger.error("Unsupported hit application pid=\(pid, privacy: .public) bundle=\(bundleIdentifier, privacy: .public)")
             throw AccessibilityClientError.unsupportedApplication
         }
@@ -102,6 +102,17 @@ final class AccessibilityClient {
             resolvedHitElement = hitElement
         }
 
+        if SupportedApplication.isTerminal(
+            bundleIdentifier: bundleIdentifier,
+            applicationName: applicationName
+        ) {
+            return .editor(try terminalEditorSource(
+                hitElement: resolvedHitElement,
+                applicationPID: pid,
+                applicationName: applicationName
+            ))
+        }
+
         guard var snapshot = captureSnapshot(from: resolvedHitElement, clickPoint: point) else {
             throw AccessibilityClientError.noReadableResponse
         }
@@ -122,8 +133,7 @@ final class AccessibilityClient {
             return .editor(try editorSource(
                 nodeID: nodeID,
                 applicationPID: pid,
-                applicationName: runningApplication?.localizedName ?? bundleIdentifier,
-                bundleIdentifier: bundleIdentifier
+                applicationName: applicationName
             ))
         case .assistantResponse:
             return .response(try responseSnapshot(
@@ -194,8 +204,7 @@ final class AccessibilityClient {
     private func editorSource(
         nodeID: Int,
         applicationPID: pid_t,
-        applicationName: String,
-        bundleIdentifier: String
+        applicationName: String
     ) throws -> EditorSource {
         guard let element = elementsByNodeID[nodeID] else {
             throw AccessibilityClientError.noElement
@@ -205,17 +214,8 @@ final class AccessibilityClient {
             throw AccessibilityClientError.noWindow
         }
 
-        let isTerminal = terminalBundleIdentifiers.contains(bundleIdentifier)
-        // Terminal text areas usually expose the entire screen buffer rather
-        // than only the command being edited. Start with a safe empty draft
-        // instead of importing unrelated terminal history.
-        let text: String = isTerminal ? "" : (copyAttribute(element, kAXValueAttribute as CFString) ?? "")
-        let capability: WriteBackCapability
-        if isTerminal {
-            capability = .pasteRequired
-        } else {
-            capability = isValueSettable(element) ? .direct : .unavailable
-        }
+        let text: String = copyAttribute(element, kAXValueAttribute as CFString) ?? ""
+        let capability: WriteBackCapability = isValueSettable(element) ? .direct : .unavailable
         return EditorSource(
             applicationPID: applicationPID,
             applicationName: applicationName,
@@ -224,6 +224,37 @@ final class AccessibilityClient {
             windowFrame: windowFrame,
             capability: capability,
             originalText: text
+        )
+    }
+
+    /// Terminal accessibility values usually contain the entire screen buffer,
+    /// not just the command being edited. Always start from a safe empty draft
+    /// and hand it back through an explicit user paste.
+    private func terminalEditorSource(
+        hitElement: AXUIElement,
+        applicationPID: pid_t,
+        applicationName: String
+    ) throws -> EditorSource {
+        let application = AXUIElementCreateApplication(applicationPID)
+        let focusedElement: AXUIElement = copyAttribute(
+            application,
+            kAXFocusedUIElementAttribute as CFString
+        ) ?? hitElement
+        guard let window: AXUIElement = copyAttribute(hitElement, kAXWindowAttribute as CFString)
+                ?? copyAttribute(focusedElement, kAXWindowAttribute as CFString)
+                ?? copyAttribute(application, kAXFocusedWindowAttribute as CFString),
+              let windowFrame = frame(of: window) else {
+            throw AccessibilityClientError.noWindow
+        }
+
+        return EditorSource(
+            applicationPID: applicationPID,
+            applicationName: applicationName,
+            element: focusedElement,
+            windowElement: window,
+            windowFrame: windowFrame,
+            capability: .pasteRequired,
+            originalText: ""
         )
     }
 
