@@ -1,5 +1,6 @@
 import AppKit
 import ApplicationServices
+import Carbon.HIToolbox
 import OSLog
 
 @MainActor
@@ -11,6 +12,8 @@ final class AppController: NSObject {
     private let statusItem = NSStatusBar.system.statusItem(withLength: NSStatusItem.variableLength)
 
     private var eventMonitor: Any?
+    private var universalEditorHotKey: EventHotKeyRef?
+    private var universalEditorHotKeyHandler: EventHandlerRef?
     private var binding: ResponseBinding?
     private var editorBinding: EditorBinding?
     private var sourceApplicationPID: pid_t?
@@ -34,6 +37,7 @@ final class AppController: NSObject {
         }
         configureStatusItem()
         installEventMonitor()
+        installKeyboardMonitor()
         prepareRunningSourceApplications()
         NSWorkspace.shared.notificationCenter.addObserver(
             self,
@@ -59,6 +63,10 @@ final class AppController: NSObject {
         let heading = NSMenuItem(title: "Option-Click (needs Accessibility)", action: nil, keyEquivalent: "")
         heading.isEnabled = false
         menu.addItem(heading)
+
+        let universalEditorItem = NSMenuItem(title: "Option-M: Open Editor for Frontmost Terminal", action: nil, keyEquivalent: "")
+        universalEditorItem.isEnabled = false
+        menu.addItem(universalEditorItem)
 
         for option in Trigger.allCases {
             let item = NSMenuItem(title: option.title, action: #selector(selectTrigger(_:)), keyEquivalent: "")
@@ -108,6 +116,53 @@ final class AppController: NSObject {
             MainActor.assumeIsolated {
                 self?.handleMouseDown(event)
             }
+        }
+    }
+
+    private func installKeyboardMonitor() {
+        var eventType = EventTypeSpec(
+            eventClass: OSType(kEventClassKeyboard),
+            eventKind: UInt32(kEventHotKeyPressed)
+        )
+        InstallEventHandler(
+            GetApplicationEventTarget(),
+            { _, _, userData in
+                guard let userData else { return OSStatus(eventNotHandledErr) }
+                let controller = Unmanaged<AppController>.fromOpaque(userData).takeUnretainedValue()
+                DispatchQueue.main.async {
+                    controller.openUniversalTerminalEditor()
+                }
+                return noErr
+            },
+            1,
+            &eventType,
+            Unmanaged.passUnretained(self).toOpaque(),
+            &universalEditorHotKeyHandler
+        )
+
+        let hotKeyID = EventHotKeyID(signature: OSType(0x4D41_4749), id: 1) // MAGI
+        RegisterEventHotKey(
+            UniversalEditorShortcut.keyCode,
+            UniversalEditorShortcut.carbonModifiers,
+            hotKeyID,
+            GetApplicationEventTarget(),
+            0,
+            &universalEditorHotKey
+        )
+    }
+
+    private func openUniversalTerminalEditor() {
+        guard enabled else { return }
+        guard AXIsProcessTrusted() else {
+            promptForAccessibilityIfNeeded()
+            return
+        }
+
+        do {
+            startEditing(try accessibility.frontmostTerminalEditorSource())
+        } catch {
+            logger.error("Universal terminal editor failed: \(error.localizedDescription, privacy: .public)")
+            readerPanel.showMessage("Magi could not open the focused terminal. Click inside the terminal, then press Option-M again.")
         }
     }
 
@@ -309,5 +364,18 @@ private enum Trigger: String, CaseIterable {
     static func load() -> Trigger {
         guard let value = UserDefaults.standard.string(forKey: "activationTrigger") else { return .option }
         return Trigger(rawValue: value) ?? .option
+    }
+}
+
+enum UniversalEditorShortcut {
+    static let keyCode = UInt32(kVK_ANSI_M)
+    static let carbonModifiers = UInt32(optionKey)
+
+    static func matches(
+        charactersIgnoringModifiers: String?,
+        modifierFlags: NSEvent.ModifierFlags
+    ) -> Bool {
+        let relevant = modifierFlags.intersection([.command, .control, .option, .shift])
+        return charactersIgnoringModifiers?.lowercased() == "m" && relevant == [.option]
     }
 }

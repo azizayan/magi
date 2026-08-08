@@ -16,6 +16,17 @@ final class SupportedApplicationTests: XCTestCase {
         ))
     }
 
+    func testTerminalNameAndBundleVariantsAreRecognized() {
+        XCTAssertTrue(SupportedApplication.isTerminal(
+            bundleIdentifier: "com.example.coolretroterm",
+            applicationName: "Cool Retro Terminal Preview"
+        ))
+        XCTAssertTrue(SupportedApplication.isTerminal(
+            bundleIdentifier: "org.example.ghostty-preview",
+            applicationName: "Preview"
+        ))
+    }
+
     func testUnrelatedApplicationIsRejected() {
         XCTAssertFalse(SupportedApplication.isSupported(
             bundleIdentifier: "com.apple.Safari",

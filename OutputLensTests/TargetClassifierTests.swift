@@ -2,6 +2,21 @@ import XCTest
 @testable import OutputLens
 
 final class TargetClassifierTests: XCTestCase {
+    func testUniversalEditorShortcutRequiresOptionMOnly() {
+        XCTAssertTrue(UniversalEditorShortcut.matches(
+            charactersIgnoringModifiers: "m",
+            modifierFlags: [.option]
+        ))
+        XCTAssertFalse(UniversalEditorShortcut.matches(
+            charactersIgnoringModifiers: "m",
+            modifierFlags: [.option, .command]
+        ))
+        XCTAssertFalse(UniversalEditorShortcut.matches(
+            charactersIgnoringModifiers: "n",
+            modifierFlags: [.option]
+        ))
+    }
+
     func testEditableRoleTakesPriorityOverReadableText() {
         let root = SnapshotNode(id: 1, role: "AXGroup", children: [
             SnapshotNode(id: 2, role: "AXStaticText", text: "A previous response"),

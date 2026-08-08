@@ -193,6 +193,38 @@ final class AccessibilityClient {
         }
     }
 
+    /// Open the safe paste-based editor for the frontmost application without
+    /// trying to identify a terminal widget. Terminal emulators and terminal
+    /// panes do not expose a standard input field, so an explicit keyboard
+    /// shortcut is the universal fallback for unknown hosts and CLI tools.
+    func frontmostTerminalEditorSource() throws -> EditorSource {
+        guard let application = NSWorkspace.shared.frontmostApplication,
+              application.processIdentifier != ProcessInfo.processInfo.processIdentifier else {
+            throw AccessibilityClientError.unsupportedApplication
+        }
+
+        let pid = application.processIdentifier
+        let applicationElement = AXUIElementCreateApplication(pid)
+        let focusedElement: AXUIElement? = copyAttribute(
+            applicationElement,
+            kAXFocusedUIElementAttribute as CFString
+        )
+        let focusedWindow: AXUIElement? = copyAttribute(
+            applicationElement,
+            kAXFocusedWindowAttribute as CFString
+        )
+        guard let sourceElement = focusedElement ?? focusedWindow else {
+            throw AccessibilityClientError.noElement
+        }
+
+        return try terminalEditorSource(
+            hitElement: sourceElement,
+            applicationPID: pid,
+            applicationName: application.localizedName ?? application.bundleIdentifier ?? "Terminal",
+            prefersFocusedElement: true
+        )
+    }
+
     private func adapter(for bundleIdentifier: String) -> any ResponseAdapter {
         bundleIdentifier == "com.anthropic.claudefordesktop" ? ClaudeResponseAdapter() : CodexResponseAdapter()
     }

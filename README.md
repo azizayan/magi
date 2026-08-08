@@ -36,6 +36,10 @@ the clicked assistant message in **Reader** mode:
 - Integrated terminals in VS Code, Cursor, VSCodium, Windsurf, and Antigravity
   are recognized by their terminal Accessibility surface; other IDE areas are
   deliberately left alone.
+- Press **Option-M** while any terminal pane is focused to open the Semi-Code
+  Editor without relying on the host's Accessibility labels. This universal
+  fallback works with unknown terminal apps, integrated IDE terminals, and any
+  CLI running inside them.
   **Apply** copies the draft and returns focus to the terminal; the user pastes
   explicitly, so Magi never injects or executes a command.
 - Links in a rendered response are clickable.

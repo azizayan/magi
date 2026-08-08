@@ -47,8 +47,16 @@ enum SupportedApplication {
     }
 
     static func isTerminal(bundleIdentifier: String, applicationName: String) -> Bool {
-        terminalBundleIdentifiers.contains(bundleIdentifier)
-            || terminalNames.contains(applicationName.lowercased())
+        if terminalBundleIdentifiers.contains(bundleIdentifier) { return true }
+
+        let normalizedName = applicationName.lowercased()
+        if terminalNames.contains(normalizedName) { return true }
+
+        let normalizedBundleIdentifier = bundleIdentifier.lowercased()
+        return terminalNames.contains { marker in
+            normalizedName.contains(marker)
+                || normalizedBundleIdentifier.contains(marker.replacingOccurrences(of: " ", with: ""))
+        }
     }
 
     static func isMixedHost(bundleIdentifier: String) -> Bool {
