@@ -21,6 +21,8 @@ targets:
       properties:
         CFBundleDisplayName: Magi
         CFBundleName: Magi
+        CFBundleShortVersionString: "0.1.0"
+        CFBundleVersion: "1"
         LSUIElement: true
         NSAccessibilityUsageDescription: Magi uses Accessibility access to read the Codex or Claude response or editable input you Option-click, including supported terminals.
         NSHumanReadableCopyright: Copyright © 2026

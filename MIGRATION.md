@@ -2,20 +2,22 @@
 
 ## Decision
 
-Magi ships as **one app per platform**, not one app per capture method:
+Magi ships as a native enhanced app on macOS and a cross-platform clipboard
+reader for Windows and Linux:
 
-- **Magi for macOS** is the Swift/AppKit app. It contains *both* capture modes:
-  permission-free **Copy to Magi** (clipboard) and enhanced **Option-click**
-  (Accessibility). macOS users install a single app.
+- **Magi for macOS** is the Swift/AppKit app: enhanced **Option-click** Reader
+  mode and the Semi-Code Editor, both using Accessibility.
 - **Magi for Windows and Linux** is the Rust/egui app: the cross-platform
   **Copy to Magi** clipboard reader.
+
+The Rust clipboard reader can also be built on macOS, but it is not bundled
+with the Swift `Magi-macos.zip` release artifact.
 
 The two capture *methods* remain intentionally different, and that difference is
 why the codebases stay split by platform rather than merged into one language:
 
 - **Copy to Magi** does not inspect another application's interface, so it needs
-  no macOS Accessibility permission. It is implemented natively on each platform
-  (`NSPasteboard` on macOS, `arboard` in Rust elsewhere).
+  no Accessibility permission. It is implemented in Rust with `arboard`.
 - **Option-click** reads another application's element beneath a global click,
   which requires macOS Accessibility APIs. Rewriting that adapter in Rust cannot
   remove the operating-system permission, so it lives only in the macOS app.
@@ -54,7 +56,8 @@ The current Swift application remains isolated from the Rust app. This avoids a 
    - Rendered text remains selectable and code indentation is preserved.
 
 3. **Platform packaging and validation**
-   - A local unsigned macOS `.app` packaging script is implemented.
+   - Local unsigned `.app` packaging exists for both the Swift macOS product
+     and the optional Rust clipboard reader build.
    - Menu-bar lifecycle, close-to-hide behavior, and a configurable global show/hide shortcut are implemented.
    - Local tests, strict linting, and a macOS UI smoke test pass.
    - Add a macOS, Windows, and Linux CI matrix when the repository token permits workflow updates.
