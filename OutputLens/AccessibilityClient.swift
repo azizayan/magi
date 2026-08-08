@@ -122,6 +122,19 @@ final class AccessibilityClient {
             ))
         }
 
+        // Chromium composers often hit-test to a nested text/group node even
+        // though the editable AXTextArea is one of its parents. Resolve that
+        // live ancestor before building the much larger response snapshot so
+        // input clicks cannot fall through to Reader mode.
+        if SupportedApplication.desktopBundleIdentifiers.contains(bundleIdentifier),
+           let editableElement = nearestEditableAncestor(from: resolvedHitElement) {
+            return .editor(try editorSource(
+                element: editableElement,
+                applicationPID: pid,
+                applicationName: applicationName
+            ))
+        }
+
         guard var snapshot = captureSnapshot(from: resolvedHitElement, clickPoint: point) else {
             throw AccessibilityClientError.noReadableResponse
         }
@@ -265,6 +278,18 @@ final class AccessibilityClient {
         guard let element = elementsByNodeID[nodeID] else {
             throw AccessibilityClientError.noElement
         }
+        return try editorSource(
+            element: element,
+            applicationPID: applicationPID,
+            applicationName: applicationName
+        )
+    }
+
+    private func editorSource(
+        element: AXUIElement,
+        applicationPID: pid_t,
+        applicationName: String
+    ) throws -> EditorSource {
         guard let window: AXUIElement = copyAttribute(element, kAXWindowAttribute as CFString),
               let windowFrame = frame(of: window) else {
             throw AccessibilityClientError.noWindow
@@ -444,6 +469,19 @@ final class AccessibilityClient {
     }
 
     // MARK: - Element helpers
+
+    private func nearestEditableAncestor(from hitElement: AXUIElement) -> AXUIElement? {
+        var current: AXUIElement? = hitElement
+        for _ in 0..<16 {
+            guard let element = current else { return nil }
+            let role: String = copyAttribute(element, kAXRoleAttribute as CFString) ?? ""
+            if TargetClassifier.editableRoles.contains(role), isValueSettable(element) {
+                return element
+            }
+            current = copyAttribute(element, kAXParentAttribute as CFString)
+        }
+        return nil
+    }
 
     private func children(of element: AXUIElement) -> [AXUIElement] {
         let attributes: [CFString] = [
