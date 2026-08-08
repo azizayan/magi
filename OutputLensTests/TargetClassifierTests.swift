@@ -74,6 +74,29 @@ final class TargetClassifierTests: XCTestCase {
         XCTAssertEqual(TargetClassifier.classify(snapshot), .editableInput(nodeID: 2))
     }
 
+    func testVSCodeTerminalCanvasFindsSiblingTerminalCaret() {
+        let root = SnapshotNode(id: 1, role: "AXWindow", children: [
+            SnapshotNode(id: 2, role: "AXGroup", children: [
+                SnapshotNode(id: 3, role: "AXGroup", children: [
+                    SnapshotNode(
+                        id: 4,
+                        role: "AXTextField",
+                        label: "Terminal 1, codex Run the command: Toggle Screen Reader Accessibility Mode",
+                        isValueSettable: true
+                    ),
+                ]),
+                SnapshotNode(id: 5, role: "AXGroup"),
+            ]),
+        ])
+        let snapshot = TargetSnapshot(root: root, hitNodeID: 5, clickPoint: .zero)
+
+        XCTAssertEqual(
+            TargetClassifier.classify(snapshot, recognizesUnlabeledTerminalSurface: true),
+            .terminalInput(nodeID: 4)
+        )
+        XCTAssertEqual(TargetClassifier.classify(snapshot), .unsupported)
+    }
+
     func testReadableOutputIsClassifiedAsResponse() {
         let root = SnapshotNode(id: 1, role: "AXGroup", children: [
             SnapshotNode(id: 2, role: "AXStaticText", text: "Model output paragraph"),

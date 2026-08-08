@@ -32,6 +32,10 @@ enum TargetClassifier {
             ) {
                 return .terminalInput(nodeID: node.id)
             }
+            if recognizesUnlabeledTerminalSurface,
+               let terminal = terminalSurfaceDescendant(in: node, remainingDepth: 3) {
+                return .terminalInput(nodeID: terminal.id)
+            }
         }
 
         for node in path.suffix(4).reversed() {
@@ -72,5 +76,26 @@ enum TargetClassifier {
             && !node.isValueSettable
             && label.isEmpty
             && identifier.isEmpty
+    }
+
+    /// VS Code places the terminal's labeled AXTextField caret beside the
+    /// large canvas that receives the click. Search only the nearest few
+    /// levels of clicked ancestors so other Terminal controls elsewhere in the
+    /// IDE window cannot turn an editor or sidebar click into terminal input.
+    private static func terminalSurfaceDescendant(
+        in node: SnapshotNode,
+        remainingDepth: Int
+    ) -> SnapshotNode? {
+        guard remainingDepth > 0 else { return nil }
+        for child in node.children {
+            if isTerminalSurface(child) { return child }
+            if let match = terminalSurfaceDescendant(
+                in: child,
+                remainingDepth: remainingDepth - 1
+            ) {
+                return match
+            }
+        }
+        return nil
     }
 }
