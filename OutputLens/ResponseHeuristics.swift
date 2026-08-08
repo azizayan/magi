@@ -43,7 +43,8 @@ enum ResponseHeuristics {
     static func isSafeUpdate(previous: String, next: String) -> Bool {
         guard !next.isEmpty else { return false }
         guard !previous.isEmpty else { return true }
-        if next.hasPrefix(previous) || previous.hasPrefix(next) { return true }
+        guard next.count >= previous.count else { return false }
+        if next.hasPrefix(previous) { return true }
 
         let fingerprintLength = min(80, previous.count, next.count)
         guard fingerprintLength >= 20 else { return false }

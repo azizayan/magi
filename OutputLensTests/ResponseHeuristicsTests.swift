@@ -14,6 +14,13 @@ final class ResponseHeuristicsTests: XCTestCase {
         XCTAssertTrue(ResponseHeuristics.isSafeUpdate(previous: "A sufficiently long response begins here", next: "A sufficiently long response begins here and continues"))
     }
 
+    func testSafeUpdateRejectsVirtualizedBeginningPrefix() {
+        XCTAssertFalse(ResponseHeuristics.isSafeUpdate(
+            previous: "Complete response beginning followed by the remaining paragraphs",
+            next: "Complete response beginning"
+        ))
+    }
+
     func testSafeUpdateRejectsDifferentResponse() {
         XCTAssertFalse(ResponseHeuristics.isSafeUpdate(previous: "First response with enough identifying text", next: "Second response with completely different text"))
     }
