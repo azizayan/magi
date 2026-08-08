@@ -207,7 +207,7 @@ final class ReaderPanelController: NSWindowController, NSWindowDelegate, NSTextV
     private var isNearBottom: Bool {
         guard let scrollView = textView.enclosingScrollView else { return true }
         let visibleMaxY = scrollView.contentView.bounds.maxY
-        return textView.bounds.maxY - visibleMaxY < 80
+        return textView.bounds.maxY - visibleMaxY < 8
     }
 
     private func configureButtons() {
@@ -320,6 +320,8 @@ final class ReaderPanelController: NSWindowController, NSWindowDelegate, NSTextV
 
         let scrollView = NSScrollView()
         scrollView.hasVerticalScroller = true
+        scrollView.verticalScrollElasticity = .none
+        scrollView.horizontalScrollElasticity = .none
         scrollView.drawsBackground = false
         scrollView.translatesAutoresizingMaskIntoConstraints = false
 
