@@ -52,7 +52,9 @@ impl ShortcutChoice {
 #[derive(Clone, Copy, Debug)]
 pub enum DesktopAction {
     ToggleWindow,
+    #[cfg(any(target_os = "macos", target_os = "windows"))]
     ToggleListening,
+    #[cfg(any(target_os = "macos", target_os = "windows"))]
     Quit,
 }
 

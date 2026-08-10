@@ -92,10 +92,12 @@ impl MagiApp {
                     }
                     self.desktop.set_window_visible(self.window_visible);
                 }
+                #[cfg(any(target_os = "macos", target_os = "windows"))]
                 DesktopAction::ToggleListening => {
                     self.reader.set_listening(!self.reader.is_listening());
                     self.desktop.set_listening(self.reader.is_listening());
                 }
+                #[cfg(any(target_os = "macos", target_os = "windows"))]
                 DesktopAction::Quit => {
                     self.quitting = true;
                     ctx.send_viewport_cmd(egui::ViewportCommand::Close);
