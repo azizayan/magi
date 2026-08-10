@@ -335,6 +335,31 @@ final class ResponseSelectionTests: XCTestCase {
         )
     }
 
+    func testMultipleActionRowsKeepLargeInternalResponseGapsTogether() {
+        let root = SnapshotNode(
+            id: 1,
+            role: "AXGroup",
+            frame: CGRect(x: 0, y: 80, width: 640, height: 900),
+            children: [
+                paragraph(id: 10, "User prompt", y: 100),
+                copyButton(id: 11, label: "Copy message", y: 145),
+                paragraph(id: 20, "Answer begins", y: 210),
+                paragraph(id: 21, "A list appears", y: 270),
+                paragraph(id: 22, "Answer continues after a large layout gap", y: 520),
+                paragraph(id: 23, "Answer finishes", y: 760),
+                copyButton(id: 24, y: 850),
+            ]
+        )
+        let fixture = TargetSnapshot(root: root, hitNodeID: 21, clickPoint: CGPoint(x: 100, y: 280))
+
+        let resolution = ResponseSelection.resolve(snapshot: fixture, adapter: adapter)
+
+        XCTAssertEqual(
+            resolution?.text,
+            "Answer begins\nA list appears\nAnswer continues after a large layout gap\nAnswer finishes"
+        )
+    }
+
     func testVeryLongSingleResponseIsSelectedWhole() {
         let prompt = SnapshotNode(id: 10, role: "AXGroup", frame: CGRect(x: 20, y: 100, width: 600, height: 60), children: [
             paragraph(id: 11, "Short user prompt", y: 100),

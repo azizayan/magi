@@ -473,7 +473,12 @@ enum ResponseSelection {
         let fragmentFrames = fragments.compactMap(\.frame)
 
         let clusterBottoms = clusters.filter { !$0.frame.isNull }.map(\.frame.maxY)
-        let gapBoundaries = turnGapBoundaries(fragments)
+        // Multiple real action rows already provide exact message endings.
+        // Adding whitespace boundaries in that shape incorrectly splits long
+        // Codex answers at lists, callouts, and paragraph gaps. Whitespace is
+        // only evidence when the source exposes at most one real action row
+        // (for example, hover-only controls).
+        let gapBoundaries = clusterBottoms.count <= 1 ? turnGapBoundaries(fragments) : []
 
         let fragmentTop = fragmentFrames.map(\.minY).min()
         let fragmentBottom = fragmentFrames.map(\.maxY).max()
