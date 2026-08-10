@@ -1,5 +1,6 @@
 import AppKit
 import ApplicationServices
+import Carbon.HIToolbox
 import Darwin
 import OSLog
 
@@ -599,18 +600,32 @@ final class AccessibilityClient {
         AXUIElementSetAttributeValue(element, kAXFocusedAttribute as CFString, kCFBooleanTrue)
     }
 
-    /// Paste the prepared terminal draft into the source process. This emits
-    /// Command-V only; it never presses Return or submits the command.
-    func paste(intoApplication processIdentifier: pid_t) -> Bool {
-        guard let source = CGEventSource(stateID: .combinedSessionState),
-              let keyDown = CGEvent(keyboardEventSource: source, virtualKey: 9, keyDown: true),
-              let keyUp = CGEvent(keyboardEventSource: source, virtualKey: 9, keyDown: false) else {
-            return false
+    static let terminalReplacementKeystrokes: [(keyCode: CGKeyCode, flags: CGEventFlags)] = [
+        (CGKeyCode(kVK_ANSI_E), .maskControl),
+        (CGKeyCode(kVK_ANSI_U), .maskControl),
+        (CGKeyCode(kVK_ANSI_V), .maskCommand),
+    ]
+
+    /// Replace the source terminal's current prompt with the prepared draft.
+    /// Control-E moves to the end, Control-U clears back to the beginning, and
+    /// Command-V pastes the draft. Return is never emitted.
+    func replaceTerminalInput(inApplication processIdentifier: pid_t) -> Bool {
+        guard let source = CGEventSource(stateID: .combinedSessionState) else { return false }
+        for stroke in Self.terminalReplacementKeystrokes {
+            guard let keyDown = CGEvent(
+                keyboardEventSource: source,
+                virtualKey: stroke.keyCode,
+                keyDown: true
+            ), let keyUp = CGEvent(
+                keyboardEventSource: source,
+                virtualKey: stroke.keyCode,
+                keyDown: false
+            ) else { return false }
+            keyDown.flags = stroke.flags
+            keyUp.flags = stroke.flags
+            keyDown.postToPid(processIdentifier)
+            keyUp.postToPid(processIdentifier)
         }
-        keyDown.flags = .maskCommand
-        keyUp.flags = .maskCommand
-        keyDown.postToPid(processIdentifier)
-        keyUp.postToPid(processIdentifier)
         return true
     }
 

@@ -1,5 +1,6 @@
 import XCTest
 import ApplicationServices
+import Carbon.HIToolbox
 @testable import OutputLens
 
 @MainActor
@@ -66,6 +67,18 @@ final class EditorBindingTests: XCTestCase {
         )
 
         XCTAssertEqual(result, .failed("This input does not support write-back. Your draft is preserved here."))
+    }
+
+    func testTerminalReplacementClearsBeforePasteAndNeverPressesReturn() {
+        let strokes = AccessibilityClient.terminalReplacementKeystrokes
+
+        XCTAssertEqual(strokes.map(\.keyCode), [
+            CGKeyCode(kVK_ANSI_E),
+            CGKeyCode(kVK_ANSI_U),
+            CGKeyCode(kVK_ANSI_V),
+        ])
+        XCTAssertEqual(strokes.map(\.flags), [.maskControl, .maskControl, .maskCommand])
+        XCTAssertFalse(strokes.map(\.keyCode).contains(CGKeyCode(kVK_Return)))
     }
 
     private func makeBinding(capability: WriteBackCapability) -> EditorBinding {

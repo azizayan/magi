@@ -183,7 +183,7 @@ Terminal input is harder than a normal text field. Many terminal applications ex
 Use two adapter paths:
 
 - **Direct input adapter:** for Codex, Claude, and terminals that expose a settable text value.
-- **Paste adapter:** for terminals without direct write-back. Applying copies the edited text, focuses the original terminal, and sends Command-V without ever sending Enter. If event creation fails, the copied draft remains available for a manual paste.
+- **Paste adapter:** for terminals without direct write-back. Applying copies the edited text, focuses the original terminal, clears its current prompt with Control-E then Control-U, and sends Command-V without ever sending Enter. If event creation fails, the copied draft remains available for a manual paste.
 
 The macOS adapter recognizes Terminal, iTerm2, Warp, Ghostty, Kitty, Alacritty,
 WezTerm, Hyper, Rio, Wave, and Tabby at the host-app boundary. This makes the

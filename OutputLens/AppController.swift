@@ -245,7 +245,7 @@ final class AppController: NSObject {
             DispatchQueue.main.asyncAfter(deadline: .now() + 0.15) { [weak self] in
                 guard let self else { return }
                 self.accessibility.focus(source.element)
-                if self.accessibility.paste(intoApplication: source.applicationPID) {
+                if self.accessibility.replaceTerminalInput(inApplication: source.applicationPID) {
                     self.readerPanel.showEditorStatus("Applied to \(source.applicationName). Nothing was submitted.", isError: false)
                 } else {
                     self.readerPanel.showEditorStatus("Copied. Press Command-V in \(source.applicationName); nothing was submitted.", isError: false)
