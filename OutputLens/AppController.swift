@@ -240,9 +240,17 @@ final class AppController: NSObject {
         case .applied:
             readerPanel.showEditorStatus("Applied to \(editorBinding.source.applicationName). Nothing was submitted.", isError: false)
         case .copiedForPaste:
-            NSRunningApplication(processIdentifier: editorBinding.source.applicationPID)?.activate()
-            accessibility.focus(editorBinding.source.element)
-            readerPanel.showEditorStatus("Copied. Paste in \(editorBinding.source.applicationName) when ready; nothing was executed.", isError: false)
+            let source = editorBinding.source
+            NSRunningApplication(processIdentifier: source.applicationPID)?.activate()
+            DispatchQueue.main.asyncAfter(deadline: .now() + 0.15) { [weak self] in
+                guard let self else { return }
+                self.accessibility.focus(source.element)
+                if self.accessibility.paste(intoApplication: source.applicationPID) {
+                    self.readerPanel.showEditorStatus("Applied to \(source.applicationName). Nothing was submitted.", isError: false)
+                } else {
+                    self.readerPanel.showEditorStatus("Copied. Press Command-V in \(source.applicationName); nothing was submitted.", isError: false)
+                }
+            }
         case .failed(let reason):
             readerPanel.showEditorStatus(reason, isError: true)
         }

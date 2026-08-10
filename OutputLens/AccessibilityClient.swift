@@ -599,6 +599,21 @@ final class AccessibilityClient {
         AXUIElementSetAttributeValue(element, kAXFocusedAttribute as CFString, kCFBooleanTrue)
     }
 
+    /// Paste the prepared terminal draft into the source process. This emits
+    /// Command-V only; it never presses Return or submits the command.
+    func paste(intoApplication processIdentifier: pid_t) -> Bool {
+        guard let source = CGEventSource(stateID: .combinedSessionState),
+              let keyDown = CGEvent(keyboardEventSource: source, virtualKey: 9, keyDown: true),
+              let keyUp = CGEvent(keyboardEventSource: source, virtualKey: 9, keyDown: false) else {
+            return false
+        }
+        keyDown.flags = .maskCommand
+        keyUp.flags = .maskCommand
+        keyDown.postToPid(processIdentifier)
+        keyUp.postToPid(processIdentifier)
+        return true
+    }
+
     private func copyAttribute<T>(_ element: AXUIElement, _ attribute: CFString) -> T? {
         var value: CFTypeRef?
         guard AXUIElementCopyAttributeValue(element, attribute, &value) == .success else { return nil }

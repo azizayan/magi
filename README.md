@@ -40,8 +40,8 @@ the clicked assistant message in **Reader** mode:
   Editor without relying on the host's Accessibility labels. This universal
   fallback works with unknown terminal apps, integrated IDE terminals, and any
   CLI running inside them.
-  **Apply** copies the draft and returns focus to the terminal; the user pastes
-  explicitly, so Magi never injects or executes a command.
+  **Apply** pastes the draft into the focused terminal; Magi never presses Enter
+  or executes the command.
 - Links in a rendered response are clickable.
 
 ### Build and run
