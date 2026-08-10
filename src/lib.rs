@@ -11,7 +11,7 @@ impl ReaderState {
     pub fn new(initial_clipboard: Option<String>) -> Self {
         Self {
             last_seen: initial_clipboard,
-            listening: true,
+            listening: false,
             ..Self::default()
         }
     }
@@ -30,6 +30,10 @@ impl ReaderState {
 
     pub fn set_listening(&mut self, listening: bool) {
         self.listening = listening;
+    }
+
+    pub fn clear_content(&mut self) {
+        self.content.clear();
     }
 
     pub fn baseline_clipboard(&mut self, text: String) {
@@ -69,11 +73,13 @@ mod tests {
     fn startup_clipboard_is_only_a_baseline() {
         let state = ReaderState::new(Some("older copy".into()));
         assert!(state.is_empty());
+        assert!(!state.is_listening());
     }
 
     #[test]
     fn a_new_copy_replaces_the_reader_content() {
         let mut state = ReaderState::new(Some("old".into()));
+        state.set_listening(true);
         assert!(state.observe_clipboard("first response".into()));
         assert!(state.observe_clipboard("second response".into()));
         assert_eq!(state.content(), "second response");
@@ -82,6 +88,7 @@ mod tests {
     #[test]
     fn repeated_or_blank_clipboard_content_is_ignored() {
         let mut state = ReaderState::new(None);
+        state.set_listening(true);
         assert!(state.observe_clipboard("response".into()));
         assert!(!state.observe_clipboard("response".into()));
         assert!(!state.observe_clipboard("  \n".into()));
@@ -91,7 +98,6 @@ mod tests {
     #[test]
     fn pausing_stops_automatic_replacement() {
         let mut state = ReaderState::new(None);
-        state.set_listening(false);
         assert!(!state.observe_clipboard("unrelated copy".into()));
         assert!(state.is_empty());
     }
@@ -99,7 +105,6 @@ mod tests {
     #[test]
     fn capture_now_works_while_paused() {
         let mut state = ReaderState::new(None);
-        state.set_listening(false);
         assert!(state.capture_now("chosen response".into()));
         assert_eq!(state.content(), "chosen response");
     }
@@ -113,7 +118,18 @@ mod tests {
         assert!(!state.observe_clipboard("selected words".into()));
         assert_eq!(state.content(), "complete response");
 
+        state.set_listening(true);
         assert!(state.observe_clipboard("next source response".into()));
         assert_eq!(state.content(), "next source response");
+    }
+
+    #[test]
+    fn clear_discards_displayed_content() {
+        let mut state = ReaderState::new(None);
+        state.capture_now("sensitive response".into());
+
+        state.clear_content();
+
+        assert!(state.is_empty());
     }
 }

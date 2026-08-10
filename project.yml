@@ -39,6 +39,29 @@ targets:
       - path: OutputLensTests
     dependencies:
       - target: OutputLens
+      - target: MagiIntegrationHost
+    settings:
+      base:
+        GENERATE_INFOPLIST_FILE: YES
+
+  MagiIntegrationHost:
+    type: application
+    platform: macOS
+    sources:
+      - path: IntegrationHost
+    info:
+      path: IntegrationHost/Info.plist
+      properties:
+        CFBundleDisplayName: Magi Integration Host
+        CFBundleName: Magi Integration Host
+        CFBundleShortVersionString: "0.1.0"
+        CFBundleVersion: "1"
+        LSUIElement: true
+    settings:
+      base:
+        PRODUCT_BUNDLE_IDENTIFIER: com.azizemreayan.MagiIntegrationHost
+        PRODUCT_NAME: MagiIntegrationHost
+        CODE_SIGN_IDENTITY: "-"
 
 schemes:
   OutputLens:
@@ -47,5 +70,17 @@ schemes:
         OutputLens: all
         OutputLensTests: [test]
     test:
+      targets:
+        - OutputLensTests
+
+  OutputLensIntegration:
+    build:
+      targets:
+        OutputLens: all
+        MagiIntegrationHost: all
+        OutputLensTests: [test]
+    test:
+      environmentVariables:
+        MAGI_RUN_AX_INTEGRATION: "1"
       targets:
         - OutputLensTests

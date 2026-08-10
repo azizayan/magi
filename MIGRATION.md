@@ -45,8 +45,8 @@ The current Swift application remains isolated from the Rust app. This avoids a 
 1. **Cross-platform foundation — implemented**
    - Rust application builds as `magi`.
    - New copied text replaces the reader content.
-   - Startup clipboard content is not shown automatically.
-   - Automatic updates can be paused; `Paste now` remains available.
+   - Startup clipboard content is not read or shown automatically.
+   - Automatic updates are opt-in; `Paste now` and `Clear` remain available.
    - The reader is resizable, stays above normal windows, supports text selection, and remembers text size.
    - Copying a selection from the reader does not replace the displayed response.
 
@@ -56,23 +56,26 @@ The current Swift application remains isolated from the Rust app. This avoids a 
    - Rendered text remains selectable and code indentation is preserved.
 
 3. **Platform packaging and validation**
-   - Local unsigned `.app` packaging exists for both the Swift macOS product
-     and the optional Rust clipboard reader build.
+   - Local ad-hoc packaging produces an explicitly unnotarized ZIP and checksum;
+     public Swift binaries require Developer ID signing and notarization.
    - Menu-bar lifecycle, close-to-hide behavior, and a configurable global show/hide shortcut are implemented.
    - Local tests, strict linting, and a macOS UI smoke test pass.
-   - Add a macOS, Windows, and Linux CI matrix when the repository token permits workflow updates.
+   - A macOS Swift and macOS/Windows/Linux Rust CI matrix, RustSec audit,
+     dependency updates, secret scan, and public-repository CodeQL are configured.
    - Signed installers and physical Windows/Linux smoke tests remain release work, not part of the source migration.
 
 4. **Optional native adapters**
    - Port the macOS Accessibility adapter only for users who enable enhanced Option-click mode.
    - The macOS adapter includes a Semi-Code Editor with direct write-back for
-     settable Codex/Claude inputs and an explicit-paste handoff for Terminal and
-     iTerm2. It never submits prompts or executes terminal commands.
+     settable Codex/Claude inputs and a transient paste handoff for terminals.
+     It restores the previous clipboard and never submits prompts or executes commands.
    - Investigate Windows UI Automation and Linux AT-SPI separately; each has platform-specific permissions and application-tree differences.
 
 ## Security and privacy boundary
 
-While **Auto-update** is enabled, Magi reads text clipboard changes locally. It does not send clipboard content over the network. Pause Auto-update before copying unrelated or sensitive text. A future source-app filter must be implemented separately for each operating system and should not be claimed as cross-platform until it is validated on all three.
+**Auto-update** starts disabled. While the user explicitly enables it, Magi reads
+text clipboard changes locally and never sends them over the network. Disable it
+before copying unrelated or sensitive text, and use Clear when finished.
 
 ## Verification
 

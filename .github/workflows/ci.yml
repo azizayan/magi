@@ -1,0 +1,80 @@
+name: CI
+
+on:
+  push:
+    branches: [main]
+  pull_request:
+
+permissions:
+  contents: read
+
+jobs:
+  swift:
+    name: Swift tests and package
+    runs-on: macos-15
+    steps:
+      - uses: actions/checkout@11d5960a326750d5838078e36cf38b85af677262 # v4
+      - name: Install XcodeGen
+        run: brew install xcodegen
+      - name: Analyze
+        run: |
+          xcodegen generate
+          xcodebuild -project OutputLens.xcodeproj -scheme OutputLens \
+            -destination 'platform=macOS' -derivedDataPath /tmp/magi-analyze \
+            CODE_SIGNING_ALLOWED=NO analyze
+      - name: Test
+        run: |
+          xcodebuild -project OutputLens.xcodeproj -scheme OutputLens \
+            -destination 'platform=macOS' -derivedDataPath /tmp/magi-tests \
+            CODE_SIGNING_ALLOWED=NO test
+      - name: Verify local package boundary
+        run: |
+          ./scripts/package-macos.sh
+          test -f dist/Magi-macos-UNNOTARIZED.zip
+          test -f dist/Magi-macos-UNNOTARIZED.zip.sha256
+          test ! -e dist/Magi-macos.zip
+          shasum -a 256 -c dist/Magi-macos-UNNOTARIZED.zip.sha256
+
+  rust:
+    name: Rust (${{ matrix.os }})
+    strategy:
+      fail-fast: false
+      matrix:
+        os: [ubuntu-24.04, windows-2025, macos-15]
+    runs-on: ${{ matrix.os }}
+    steps:
+      - uses: actions/checkout@11d5960a326750d5838078e36cf38b85af677262 # v4
+      - name: Install Linux desktop build dependencies
+        if: runner.os == 'Linux'
+        run: |
+          sudo apt-get update
+          sudo apt-get install -y libgl1-mesa-dev libwayland-dev libx11-dev \
+            libxcursor-dev libxi-dev libxinerama-dev libxkbcommon-dev libxrandr-dev
+      - name: Configure Rust
+        run: rustup update stable && rustup component add clippy rustfmt
+      - name: Formatting
+        if: runner.os == 'Linux'
+        run: cargo fmt --all -- --check
+      - name: Tests
+        run: cargo test --locked --all-targets --all-features
+      - name: Clippy
+        run: cargo clippy --locked --all-targets --all-features -- -D warnings
+
+  rustsec:
+    name: RustSec audit
+    runs-on: ubuntu-24.04
+    steps:
+      - uses: actions/checkout@11d5960a326750d5838078e36cf38b85af677262 # v4
+      - run: cargo install cargo-audit --locked
+      - run: cargo audit --deny warnings
+
+  secrets:
+    name: Secret scan
+    runs-on: ubuntu-24.04
+    steps:
+      - uses: actions/checkout@11d5960a326750d5838078e36cf38b85af677262 # v4
+        with:
+          fetch-depth: 0
+      - uses: gitleaks/gitleaks-action@dcedce43c6f43de0b836d1fe38946645c9c638dc # v2
+        env:
+          GITHUB_TOKEN: ${{ secrets.GITHUB_TOKEN }}

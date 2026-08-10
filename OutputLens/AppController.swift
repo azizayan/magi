@@ -239,16 +239,25 @@ final class AppController: NSObject {
         switch editorBinding.apply(using: accessibility) {
         case .applied:
             readerPanel.showEditorStatus("Applied to \(editorBinding.source.applicationName). Nothing was submitted.", isError: false)
-        case .copiedForPaste:
+        case .requiresPaste:
             let source = editorBinding.source
             NSRunningApplication(processIdentifier: source.applicationPID)?.activate()
             DispatchQueue.main.asyncAfter(deadline: .now() + 0.15) { [weak self] in
                 guard let self else { return }
+                guard self.accessibility.isValidTerminalSource(source),
+                      let transaction = PasteboardTransaction(text: editorBinding.draft) else {
+                    self.readerPanel.showEditorStatus("The original terminal is no longer available. Your draft is preserved here.", isError: true)
+                    return
+                }
                 self.accessibility.focus(source.element)
-                if self.accessibility.replaceTerminalInput(inApplication: source.applicationPID) {
+                if self.accessibility.replaceTerminalInput(for: source) {
                     self.readerPanel.showEditorStatus("Applied to \(source.applicationName). Nothing was submitted.", isError: false)
+                    DispatchQueue.main.asyncAfter(deadline: .now() + 0.15) {
+                        transaction.restoreIfOwned()
+                    }
                 } else {
-                    self.readerPanel.showEditorStatus("Copied. Press Command-V in \(source.applicationName); nothing was submitted.", isError: false)
+                    transaction.restoreIfOwned()
+                    self.readerPanel.showEditorStatus("Could not paste into \(source.applicationName). Your draft is preserved here.", isError: true)
                 }
             }
         case .failed(let reason):
@@ -307,7 +316,7 @@ final class AppController: NSObject {
             .appendingPathComponent("magi-fixture-\(formatter.string(from: .now)).json")
         do {
             try encoder.encode(snapshot).write(to: url)
-            readerPanel.showMessage("Saved anonymized Accessibility fixture to \(url.path). Text is redacted to lengths and fingerprints.")
+            readerPanel.showMessage("Saved anonymized Accessibility fixture to \(url.path). Content strings were removed; only structural data and known control categories remain.")
         } catch {
             readerPanel.showMessage("Could not save fixture: \(error.localizedDescription)")
         }

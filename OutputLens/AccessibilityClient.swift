@@ -118,6 +118,7 @@ final class AccessibilityClient {
             return .editor(try terminalEditorSource(
                 hitElement: resolvedHitElement,
                 applicationPID: pid,
+                bundleIdentifier: bundleIdentifier,
                 applicationName: applicationName,
                 prefersFocusedElement: true
             ))
@@ -132,6 +133,7 @@ final class AccessibilityClient {
             return .editor(try editorSource(
                 element: editableElement,
                 applicationPID: pid,
+                bundleIdentifier: bundleIdentifier,
                 applicationName: applicationName
             ))
         }
@@ -156,8 +158,7 @@ final class AccessibilityClient {
         }
         lastRedactedSnapshot = SnapshotRedaction.redacted(snapshot)
         #if DEBUG
-        logger.notice("Snapshot:\n\(SnapshotRedaction.structuralSummary(self.lastRedactedSnapshot ?? snapshot), privacy: .public)")
-        autoSaveFixture(lastRedactedSnapshot!)
+        logger.notice("Snapshot:\n\(SnapshotRedaction.structuralSummary(snapshot), privacy: .public)")
         #endif
 
         switch targetKind {
@@ -168,6 +169,7 @@ final class AccessibilityClient {
             return .editor(try terminalEditorSource(
                 hitElement: element,
                 applicationPID: pid,
+                bundleIdentifier: bundleIdentifier,
                 applicationName: applicationName,
                 prefersFocusedElement: false
             ))
@@ -178,6 +180,7 @@ final class AccessibilityClient {
             return .editor(try editorSource(
                 nodeID: nodeID,
                 applicationPID: pid,
+                bundleIdentifier: bundleIdentifier,
                 applicationName: applicationName
             ))
         case .assistantResponse:
@@ -194,13 +197,12 @@ final class AccessibilityClient {
         }
     }
 
-    /// Open the safe paste-based editor for the frontmost application without
-    /// trying to identify a terminal widget. Terminal emulators and terminal
-    /// panes do not expose a standard input field, so an explicit keyboard
-    /// shortcut is the universal fallback for unknown hosts and CLI tools.
+    /// Open the safe paste-based editor for a recognized terminal host or a
+    /// focused element whose Accessibility ancestry carries a terminal marker.
     func frontmostTerminalEditorSource() throws -> EditorSource {
         guard let application = NSWorkspace.shared.frontmostApplication,
-              application.processIdentifier != ProcessInfo.processInfo.processIdentifier else {
+              application.processIdentifier != ProcessInfo.processInfo.processIdentifier,
+              let bundleIdentifier = application.bundleIdentifier else {
             throw AccessibilityClientError.unsupportedApplication
         }
 
@@ -217,11 +219,20 @@ final class AccessibilityClient {
         guard let sourceElement = focusedElement ?? focusedWindow else {
             throw AccessibilityClientError.noElement
         }
+        let applicationName = application.localizedName ?? bundleIdentifier
+        guard SupportedApplication.allowsUniversalTerminalEditor(
+            bundleIdentifier: bundleIdentifier,
+            applicationName: applicationName,
+            focusedElementHasTerminalMarker: focusedElement.map(hasTerminalMarker(inAncestorsOf:)) ?? false
+        ) else {
+            throw AccessibilityClientError.unsupportedApplication
+        }
 
         return try terminalEditorSource(
             hitElement: sourceElement,
             applicationPID: pid,
-            applicationName: application.localizedName ?? application.bundleIdentifier ?? "Terminal",
+            bundleIdentifier: bundleIdentifier,
+            applicationName: applicationName,
             prefersFocusedElement: true
         )
     }
@@ -288,7 +299,7 @@ final class AccessibilityClient {
             throw AccessibilityClientError.noWindow
         }
 
-        logger.notice("Selected adapter=\(resolution.adapterName, privacy: .public) section=\(resolution.sectionIndex) of clusters=\(resolution.clusterCount) chars=\(resolution.text.count) fp=\(SnapshotRedaction.fingerprint(resolution.text), privacy: .public)")
+        logger.notice("Selected adapter=\(resolution.adapterName, privacy: .public) section=\(resolution.sectionIndex) of clusters=\(resolution.clusterCount) chars=\(resolution.text.count)")
 
         return ResponseSnapshot(
             applicationPID: applicationPID,
@@ -306,6 +317,7 @@ final class AccessibilityClient {
     private func editorSource(
         nodeID: Int,
         applicationPID: pid_t,
+        bundleIdentifier: String,
         applicationName: String
     ) throws -> EditorSource {
         guard let element = elementsByNodeID[nodeID] else {
@@ -314,6 +326,7 @@ final class AccessibilityClient {
         return try editorSource(
             element: element,
             applicationPID: applicationPID,
+            bundleIdentifier: bundleIdentifier,
             applicationName: applicationName
         )
     }
@@ -321,6 +334,7 @@ final class AccessibilityClient {
     private func editorSource(
         element: AXUIElement,
         applicationPID: pid_t,
+        bundleIdentifier: String,
         applicationName: String
     ) throws -> EditorSource {
         guard let window: AXUIElement = copyAttribute(element, kAXWindowAttribute as CFString),
@@ -332,6 +346,7 @@ final class AccessibilityClient {
         let capability: WriteBackCapability = isValueSettable(element) ? .direct : .unavailable
         return EditorSource(
             applicationPID: applicationPID,
+            bundleIdentifier: bundleIdentifier,
             applicationName: applicationName,
             element: element,
             windowElement: window,
@@ -347,6 +362,7 @@ final class AccessibilityClient {
     private func terminalEditorSource(
         hitElement: AXUIElement,
         applicationPID: pid_t,
+        bundleIdentifier: String,
         applicationName: String,
         prefersFocusedElement: Bool
     ) throws -> EditorSource {
@@ -369,6 +385,7 @@ final class AccessibilityClient {
 
         return EditorSource(
             applicationPID: applicationPID,
+            bundleIdentifier: bundleIdentifier,
             applicationName: applicationName,
             element: sourceElement,
             windowElement: window,
@@ -383,8 +400,13 @@ final class AccessibilityClient {
     /// Re-resolve the bound message from a fresh snapshot of the same
     /// container. Returns nil when the message identity cannot be confirmed.
     func refreshResponse(_ snapshot: ResponseSnapshot, previousText: String) -> ResponseResolution? {
+        let started = CFAbsoluteTimeGetCurrent()
         var builder = SnapshotBuilder(hitElement: snapshot.containerElement, budget: 3000)
         guard let root = build(snapshot.containerElement, depth: 0, builder: &builder) else { return nil }
+        let elapsedMilliseconds = (CFAbsoluteTimeGetCurrent() - started) * 1_000
+        if builder.nextID >= 2_000 || elapsedMilliseconds >= 50 {
+            logger.notice("Accessibility refresh nodes=\(builder.nextID, privacy: .public) duration_ms=\(elapsedMilliseconds, privacy: .public)")
+        }
         let containerSnapshot = TargetSnapshot(root: root, hitNodeID: root.id, clickPoint: .zero)
         return ResponseSelection.refresh(
             containerSnapshot: containerSnapshot,
@@ -566,19 +588,6 @@ final class AccessibilityClient {
         return CGRect(origin: position, size: size)
     }
 
-    #if DEBUG
-    /// Debug builds drop a redacted fixture of every click at a fixed path so a
-    /// failing selection can be captured without hunting for a menu item. Text
-    /// is already reduced to lengths and fingerprints — no conversation content.
-    private func autoSaveFixture(_ snapshot: TargetSnapshot) {
-        let encoder = JSONEncoder()
-        encoder.outputFormatting = [.prettyPrinted, .sortedKeys]
-        guard let data = try? encoder.encode(snapshot),
-              let downloads = FileManager.default.urls(for: .downloadsDirectory, in: .userDomainMask).first else { return }
-        try? data.write(to: downloads.appendingPathComponent("magi-last-click.json"))
-    }
-    #endif
-
     func isElementAlive(_ element: AXUIElement) -> Bool {
         let role: String? = copyAttribute(element, kAXRoleAttribute as CFString)
         return role != nil
@@ -600,6 +609,38 @@ final class AccessibilityClient {
         AXUIElementSetAttributeValue(element, kAXFocusedAttribute as CFString, kCFBooleanTrue)
     }
 
+    private func hasTerminalMarker(inAncestorsOf element: AXUIElement) -> Bool {
+        var current: AXUIElement? = element
+        for _ in 0..<8 {
+            guard let candidate = current else { return false }
+            let node = SnapshotNode(
+                id: 0,
+                role: copyAttribute(candidate, kAXRoleAttribute as CFString) ?? "",
+                identifier: copyAttribute(candidate, kAXIdentifierAttribute as CFString) ?? "",
+                label: copyAttribute(candidate, kAXDescriptionAttribute as CFString) ?? "",
+                isValueSettable: isValueSettable(candidate)
+            )
+            if TargetClassifier.isTerminalSurface(node) { return true }
+            current = copyAttribute(candidate, kAXParentAttribute as CFString)
+        }
+        return false
+    }
+
+    func isValidTerminalSource(_ source: EditorSource) -> Bool {
+        guard source.capability == .pasteRequired,
+              isElementAlive(source.element),
+              isElementAlive(source.windowElement),
+              let runningApplication = NSRunningApplication(processIdentifier: source.applicationPID),
+              runningApplication.bundleIdentifier == source.bundleIdentifier,
+              NSWorkspace.shared.frontmostApplication?.processIdentifier == source.applicationPID else {
+            return false
+        }
+
+        let application = AXUIElementCreateApplication(source.applicationPID)
+        let focusedWindow: AXUIElement? = copyAttribute(application, kAXFocusedWindowAttribute as CFString)
+        return focusedWindow.map { CFEqual($0, source.windowElement) } ?? false
+    }
+
     static let terminalReplacementKeystrokes: [(keyCode: CGKeyCode, flags: CGEventFlags)] = [
         (CGKeyCode(kVK_ANSI_E), .maskControl),
         (CGKeyCode(kVK_ANSI_U), .maskControl),
@@ -609,7 +650,8 @@ final class AccessibilityClient {
     /// Replace the source terminal's current prompt with the prepared draft.
     /// Control-E moves to the end, Control-U clears back to the beginning, and
     /// Command-V pastes the draft. Return is never emitted.
-    func replaceTerminalInput(inApplication processIdentifier: pid_t) -> Bool {
+    func replaceTerminalInput(for sourceTarget: EditorSource) -> Bool {
+        guard isValidTerminalSource(sourceTarget) else { return false }
         guard let source = CGEventSource(stateID: .combinedSessionState) else { return false }
         for stroke in Self.terminalReplacementKeystrokes {
             guard let keyDown = CGEvent(
@@ -623,8 +665,8 @@ final class AccessibilityClient {
             ) else { return false }
             keyDown.flags = stroke.flags
             keyUp.flags = stroke.flags
-            keyDown.postToPid(processIdentifier)
-            keyUp.postToPid(processIdentifier)
+            keyDown.postToPid(sourceTarget.applicationPID)
+            keyUp.postToPid(sourceTarget.applicationPID)
         }
         return true
     }

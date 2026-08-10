@@ -46,6 +46,37 @@ final class SupportedApplicationTests: XCTestCase {
         ))
     }
 
+    func testUniversalEditorRejectsUnmarkedNonTerminalApps() {
+        XCTAssertFalse(SupportedApplication.allowsUniversalTerminalEditor(
+            bundleIdentifier: "com.apple.Safari",
+            applicationName: "Safari",
+            focusedElementHasTerminalMarker: false
+        ))
+        XCTAssertFalse(SupportedApplication.allowsUniversalTerminalEditor(
+            bundleIdentifier: "com.microsoft.VSCode",
+            applicationName: "Code",
+            focusedElementHasTerminalMarker: false
+        ))
+    }
+
+    func testUniversalEditorAcceptsKnownOrAccessibilityMarkedTerminals() {
+        XCTAssertTrue(SupportedApplication.allowsUniversalTerminalEditor(
+            bundleIdentifier: "com.apple.Terminal",
+            applicationName: "Terminal",
+            focusedElementHasTerminalMarker: false
+        ))
+        XCTAssertTrue(SupportedApplication.allowsUniversalTerminalEditor(
+            bundleIdentifier: "com.microsoft.VSCode",
+            applicationName: "Code",
+            focusedElementHasTerminalMarker: true
+        ))
+        XCTAssertTrue(SupportedApplication.allowsUniversalTerminalEditor(
+            bundleIdentifier: "com.example.new-terminal-host",
+            applicationName: "Unknown Host",
+            focusedElementHasTerminalMarker: true
+        ))
+    }
+
     func testTerminalHelperResolvesToSupportedParentApplication() {
         let warp = ApplicationIdentity(
             processIdentifier: 822,

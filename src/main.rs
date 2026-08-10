@@ -56,8 +56,7 @@ impl MagiApp {
                 .insert(TextStyle::Button, FontId::new(15.0, prose_font.clone()));
         });
 
-        let mut clipboard = Clipboard::new().ok();
-        let initial_clipboard = clipboard.as_mut().and_then(|board| board.get_text().ok());
+        let clipboard = Clipboard::new().ok();
         let clipboard_error = clipboard
             .is_none()
             .then(|| "Clipboard access is unavailable on this system.".to_owned());
@@ -69,7 +68,7 @@ impl MagiApp {
         let desktop = DesktopIntegration::new(&cc.egui_ctx, settings.shortcut);
 
         Self {
-            reader: ReaderState::new(initial_clipboard),
+            reader: ReaderState::new(None),
             clipboard,
             clipboard_error,
             last_poll: Instant::now(),
@@ -185,8 +184,11 @@ impl MagiApp {
             if ui.button("Paste now").clicked() {
                 self.read_clipboard(true);
             }
+            if ui.button("Clear").clicked() {
+                self.reader.clear_content();
+            }
             ui.label(
-                RichText::new("Copy in Codex or Claude; no Accessibility permission needed.")
+                RichText::new("Auto-update reads all copied text while Magi is in the background.")
                     .weak(),
             );
         });
@@ -215,10 +217,10 @@ impl MagiApp {
         if self.reader.is_empty() {
             ui.vertical_centered(|ui| {
                 ui.add_space(80.0);
-                ui.heading("Copy a response to read it here");
+                ui.heading("Paste a response to read it here");
                 ui.add_space(8.0);
                 ui.label("Use the Copy button in Codex or Claude Code.");
-                ui.label("Magi will replace this message with the complete copied response.");
+                ui.label("Then choose Paste now. Auto-update is opt-in.");
             });
             return;
         }

@@ -154,7 +154,7 @@ final class ReaderPanelController: NSWindowController, NSWindowDelegate, NSTextV
     /// explicitly rather than relying on the default responder chain.
     func textView(_ textView: NSTextView, clickedOnLink link: Any, at charIndex: Int) -> Bool {
         let url: URL? = (link as? URL) ?? (link as? String).flatMap(URL.init(string:))
-        guard let url, url.scheme != nil else { return false }
+        guard let url = url.flatMap(Self.safeWebURL) else { return false }
         NSWorkspace.shared.open(url)
         return true
     }
@@ -530,7 +530,7 @@ final class ReaderPanelController: NSWindowController, NSWindowDelegate, NSTextV
             for match in expression.matches(in: result.string, range: fullRange) {
                 let textRange = match.range(at: 1)
                 let urlRange = match.range(at: 2)
-                if let url = URL(string: string.substring(with: urlRange)), url.scheme != nil {
+                if let url = URL(string: string.substring(with: urlRange)).flatMap(safeWebURL) {
                     result.addAttribute(.link, value: url, range: textRange)
                 }
                 rangesToRemove.append(NSRange(location: match.range.location, length: 1))
@@ -542,13 +542,22 @@ final class ReaderPanelController: NSWindowController, NSWindowDelegate, NSTextV
         if let detector = try? NSDataDetector(types: NSTextCheckingResult.CheckingType.link.rawValue) {
             let fullRange = NSRange(location: 0, length: result.length)
             for match in detector.matches(in: result.string, range: fullRange) {
-                guard let url = match.url,
+                guard let url = match.url.flatMap(safeWebURL),
                       result.attribute(.link, at: match.range.location, effectiveRange: nil) == nil else { continue }
                 result.addAttribute(.link, value: url, range: match.range)
             }
         }
 
         return rangesToRemove
+    }
+
+    /// Reader content is model-controlled. Restrict interactive links to web
+    /// navigation so local files and application URL handlers cannot launch.
+    static func safeWebURL(_ url: URL) -> URL? {
+        guard let scheme = url.scheme?.lowercased(),
+              scheme == "https" || scheme == "http",
+              url.host != nil else { return nil }
+        return url
     }
 
     private static func headingLevel(in line: String) -> Int? {

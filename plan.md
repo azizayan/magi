@@ -1,6 +1,9 @@
 # Magi: Response Selection and Semi-Code Editor Plan
 
-Status: Phases 1–4 implemented (snapshot diagnostics + fixture export, adapter-based response boundaries with no whole-conversation fallback, Semi-Code Editor with direct write-back, and explicit-paste Terminal/iTerm2 support). Phase 5 (native Windows/Linux adapters) remains open, as does live validation against current Codex/Claude and terminal builds using captured fixtures.
+Status: Phases 1–4 implemented (privacy-safe manual snapshot diagnostics,
+adapter-based response boundaries with no whole-conversation fallback,
+Semi-Code Editor direct write-back, and transient terminal paste with clipboard
+restoration). Phase 5 native Windows/Linux Accessibility adapters remains open.
 
 ## Problem
 
@@ -54,7 +57,9 @@ For the clicked application and window, capture:
 - Descendants of relevant ancestors within a fixed node budget.
 - Role, identifier, description, value, frame, parent/child relationship, and action labels.
 
-Log a redacted structural summary in debug builds. Text should be represented by length and a short fingerprint, not full private conversation content.
+Log a redacted structural summary in debug builds. Raw text, labels,
+identifiers, help strings, and action titles must not be logged; retain only
+text lengths and allowlisted response-control categories.
 
 This snapshot will give us evidence from the actual Codex and Claude trees instead of requiring more length-based guesses.
 
@@ -137,7 +142,7 @@ Store a response identity containing:
 - Adapter name.
 - Response element when stable.
 - Message frame and structural path.
-- Initial text fingerprint.
+- In-memory bounded text-prefix identity (never exported in diagnostics).
 - Associated action-control identity.
 
 During streaming, accept an update only if the adapter resolves the same message identity. If identity is lost, pause on the last confirmed text instead of expanding to a parent conversation.
@@ -183,7 +188,7 @@ Terminal input is harder than a normal text field. Many terminal applications ex
 Use two adapter paths:
 
 - **Direct input adapter:** for Codex, Claude, and terminals that expose a settable text value.
-- **Paste adapter:** for terminals without direct write-back. Applying copies the edited text, focuses the original terminal, clears its current prompt with Control-E then Control-U, and sends Command-V without ever sending Enter. If event creation fails, the copied draft remains available for a manual paste.
+- **Paste adapter:** for terminals without direct write-back. Applying temporarily places the edited text on the clipboard, focuses the original terminal, clears its current prompt with Control-E then Control-U, and sends Command-V without ever sending Enter. Magi restores the previous clipboard when its private transaction marker is still present; if event creation fails, the draft remains in Magi for retry without leaving it on the clipboard.
 
 The macOS adapter recognizes Terminal, iTerm2, Warp, Ghostty, Kitty, Alacritty,
 WezTerm, Hyper, Rio, Wave, and Tabby at the host-app boundary. This makes the
@@ -268,10 +273,11 @@ Verification: Option-clicking a Codex or Claude input opens its text in Editor m
 - Implemented a conservative paste-required adapter for common macOS terminal
   hosts. Magi starts with an empty draft because terminal Accessibility values
   commonly contain the whole screen buffer, not just the current command.
-- **Apply** copies the draft, suppresses Magi's clipboard watcher for that
-  self-copy, and returns focus to the terminal. The user performs Paste; Magi
-  never synthesizes Paste or Enter.
-- Live validation against the installed terminal versions remains.
+- **Apply** revalidates the terminal app, window, and focus, temporarily places
+  the draft on the clipboard, synthesizes clear + Paste without Return, then
+  restores every previous clipboard item unless a newer user copy exists.
+- The opt-in live Accessibility host automates direct write-back and terminal
+  replacement; third-party terminals remain in the manual compatibility matrix.
 
 Verification: a multiline command can be edited in Magi and returned to each supported terminal without being executed.
 

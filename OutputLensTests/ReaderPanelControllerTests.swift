@@ -59,6 +59,27 @@ final class ReaderPanelControllerTests: XCTestCase {
         XCTAssertNil(rendered.attribute(.link, at: 5, effectiveRange: nil))
     }
 
+    func testRenderDoesNotLinkifyLocalOrApplicationSchemes() {
+        for unsafeLink in [
+            "[secret](file:///Users/example/private.txt)",
+            "[settings](x-apple.systempreferences:com.apple.preference.security)",
+            "[script](javascript:alert(1))",
+            "ftp://example.com/archive",
+        ] {
+            let rendered = ReaderPanelController.render(unsafeLink, proseFontSize: 24)
+            XCTAssertNil(
+                rendered.attribute(.link, at: 0, longestEffectiveRange: nil, in: NSRange(location: 0, length: rendered.length)),
+                unsafeLink
+            )
+        }
+    }
+
+    func testSafeWebURLRequiresHTTPWithAHost() {
+        XCTAssertNotNil(ReaderPanelController.safeWebURL(URL(string: "HTTPS://example.com/path")!))
+        XCTAssertNil(ReaderPanelController.safeWebURL(URL(string: "https:relative")!))
+        XCTAssertNil(ReaderPanelController.safeWebURL(URL(fileURLWithPath: "/tmp/private")))
+    }
+
     func testComposeIncludesPromptHeaderWhenEnabled() {
         let rendered = ReaderPanelController.composeReaderContent(
             promptContext: "Explain the build", response: "The build works", showsPrompt: true, proseFontSize: 24

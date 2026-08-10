@@ -1,101 +1,102 @@
 # Publishing Magi
 
-Release target (decided): **GitHub release**, **ad-hoc / unsigned** (no Apple
-Developer account yet). Magi ships as **one app per platform**:
+Public source distribution is allowed now. A public macOS binary is allowed
+only after Developer ID signing and Apple notarization succeed. The local
+ad-hoc artifact is deliberately named `Magi-macos-UNNOTARIZED.zip` and must
+never be attached to a public release.
 
-- **macOS** — the Swift Option-click Reader and Semi-Code Editor, packaged as
-  `dist/Magi.app` / `dist/Magi-macos.zip` via `scripts/package-macos.sh`.
-- **Windows/Linux** — the Rust clipboard reader, built from source (`cargo run`)
-  for this release; packaged binaries are a follow-up.
+## Required automated gates
 
-Notarization, an app icon, and CI are deferred follow-ups, not blockers.
-
-## Critical path (can ship today)
-
-- [x] Both apps build and pass tests (`cargo test`, `xcodebuild … test`).
-- [x] `LICENSE` present (MIT, matches `Cargo.toml`).
-- [x] Packaging script ad-hoc signs and zips a release artifact.
-- [x] README documents install + Gatekeeper bypass for the unsigned build.
-- [x] Release versions aligned at `0.1.0`.
-- [ ] Final packaged-app smoke test (below).
-- [ ] Choose public distribution or keep the GitHub release private for invited testers.
-- [ ] Commit, push, tag, and create the GitHub release (commands below — run with your go-ahead).
-
-## Step 1 — Final verification
+Run the same checks as `.github/workflows/ci.yml`:
 
 ```sh
-# macOS app (Swift) — the macOS release artifact
+cargo fmt --all -- --check
+cargo test --locked --all-targets --all-features
+cargo clippy --locked --all-targets --all-features -- -D warnings
+cargo audit --deny warnings
+
+xcodegen generate
 xcodebuild -project OutputLens.xcodeproj -scheme OutputLens \
-  -destination 'platform=macOS' -derivedDataPath /private/tmp/output-lens-derived \
+  -destination 'platform=macOS' -derivedDataPath /private/tmp/magi-tests \
   CODE_SIGNING_ALLOWED=NO test
-./scripts/package-macos.sh          # → dist/Magi.app + dist/Magi-macos.zip
-
-# Rust reader (Windows/Linux)
-cargo build --release
-cargo test
-cargo clippy --quiet
+xcodebuild -project OutputLens.xcodeproj -scheme OutputLens \
+  -destination 'platform=macOS' -derivedDataPath /private/tmp/magi-analyze \
+  CODE_SIGNING_ALLOWED=NO analyze
 ```
 
-Manual smoke test on `dist/Magi.app`:
-
-1. Start Magi and confirm its menu-bar item appears.
-2. Grant Accessibility, Option-click a Codex response, and confirm only that
-   message appears in Reader mode.
-3. Repeat with a Claude response.
-4. Option-click a desktop input; edit and **Apply to Input**; confirm it writes back and
-   does not submit.
-5. Option-click a VS Code or standalone terminal; confirm Editor mode opens.
-6. Confirm **Option-M** opens Editor mode for a focused terminal without typing
-   into the terminal underneath.
-7. In terminal Editor mode, confirm **Apply** copies the draft but does not
-   paste or execute it automatically.
-8. Confirm a link in a rendered response opens in the browser.
-
-## Step 2 — Publish (run when ready)
-
-These are the outward-facing steps. They publish public content, so run them
-yourself (or confirm explicitly and I will run them).
+The normal Swift suite builds the internal Accessibility host and skips its
+permission-dependent live test. On a development Mac with Accessibility access,
+also run:
 
 ```sh
-# 1. Land the work on a branch and open it for review, or commit to main directly.
-git checkout -b release-0.1.0
-git add -A
-git commit -m "Prepare Magi 0.1.0 release"
-git push -u origin release-0.1.0
-# (merge to main via PR, or push main directly if you prefer)
-
-# 2. Tag the release.
-git tag v0.1.0
-git push origin v0.1.0
-
-# 3. Create the GitHub release with the macOS artifact.
-gh release create v0.1.0 \
-  dist/Magi-macos.zip \
-  --title "Magi 0.1.0" \
-  --notes-file RELEASE_NOTES.md \
-  --prerelease
+./scripts/test-macos-integration.sh
 ```
 
-Suggested `RELEASE_NOTES.md` outline:
+Complete and record [COMPATIBILITY.md](COMPATIBILITY.md) against the release
+candidate.
 
-- What Magi is (readable reader for Codex/Claude output).
-- macOS: download `Magi-macos.zip`; Option-click Reader + Semi-Code Editor.
-  Unsigned build — right-click → Open (link to README).
-- Windows/Linux: build the Rust reader from source with `cargo run` for now.
+## Source-only release (no Apple Developer account)
 
-## Deferred follow-ups (not blocking today)
+Publish the tagged source through GitHub. Do not attach the output of the
+default packaging command. Users build the Swift app with `./build.sh` or run
+the Rust reader with `cargo run --locked`.
 
-1. **Notarization** — once an Apple Developer ID is available: sign with the
-   Developer ID cert, `notarytool submit`, and `stapler staple` the `.app`/DMG.
-   Removes the Gatekeeper warning entirely.
-2. **App icon** — add an `.icns` and reference it (`CFBundleIconFile`) in
-   `OutputLens/Info.plist`; today the Swift app uses the generic icon.
-3. **CI** — `.github/workflows/` is empty by design; add a macOS + Rust matrix
-   (`cargo test`/`clippy`, `xcodebuild test`) when the repo token allows workflows.
-4. **Bundle identifier** — the macOS app is branded "Magi" but keeps the
-   `com.azizemreayan.OutputLens` bundle id (changing it resets the Accessibility
-   grant). Unify to `com.azizemreayan.magi` in a later release if desired.
-5. **More adapter fixtures** — continue collecting anonymized fixtures as
-   Codex, Claude, and terminal hosts change their Accessibility trees.
-6. **Windows/Linux binaries** — currently source-build only; add packaged
-   artifacts after per-platform validation.
+## Local package verification
+
+```sh
+./scripts/package-macos.sh
+shasum -a 256 -c dist/Magi-macos-UNNOTARIZED.zip.sha256
+```
+
+This path verifies the app signature before and after ZIP extraction and emits
+a checksum, but the signature is ad-hoc and has no publisher authentication.
+
+## Notarized public macOS binary
+
+Store notarization credentials in the keychain once:
+
+```sh
+xcrun notarytool store-credentials magi-notary \
+  --apple-id "YOUR_APPLE_ID" --team-id "YOUR_TEAM_ID" \
+  --password "YOUR_APP_SPECIFIC_PASSWORD"
+```
+
+Build the public artifact:
+
+```sh
+MAGI_PUBLIC_RELEASE=1 \
+MAGI_SIGNING_IDENTITY="Developer ID Application: YOUR NAME (TEAMID)" \
+MAGI_NOTARY_PROFILE=magi-notary \
+./scripts/package-macos.sh
+```
+
+The command fails closed when either release credential is absent. It enables
+the hardened runtime, signs with a timestamp, submits to Apple, waits for
+acceptance, staples and validates the ticket, checks Gatekeeper after extracting
+the final ZIP, and writes `dist/Magi-macos.zip.sha256`.
+
+Before uploading:
+
+```sh
+shasum -a 256 -c dist/Magi-macos.zip.sha256
+VERIFY_DIR="$(mktemp -d /private/tmp/magi-release-check.XXXXXX)"
+ditto -x -k dist/Magi-macos.zip "$VERIFY_DIR"
+codesign --verify --deep --strict "$VERIFY_DIR/Magi.app"
+spctl --assess --type execute --verbose "$VERIFY_DIR/Magi.app"
+```
+
+Publish only the verified ZIP and checksum. The packaging script deletes its
+unpacked staging bundle because Finder metadata can change it after verification.
+
+## Manual smoke test
+
+1. Option-click early, middle, late, and very long Codex and Claude responses.
+2. Confirm the whole clicked response appears and no adjacent turn is included.
+3. Option-click desktop inputs and apply empty and non-empty drafts.
+4. Use Option-M in each terminal host in the compatibility matrix.
+5. Confirm Apply replaces input, never presses Return, and restores the prior
+   multi-item clipboard.
+6. Switch to another app before Apply and confirm Magi refuses to send keys.
+7. Confirm only HTTP(S) links open; `file:` and custom schemes remain inert.
+8. Save a diagnostic fixture and search it for source prompts, paths, tokens,
+   labels, identifiers, and action help text; none may be present.

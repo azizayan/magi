@@ -115,24 +115,28 @@ extension TargetSnapshot {
     }
 }
 
-/// Redaction for debug logging and saved fixtures: structure, geometry, and
-/// control labels are kept; conversation text is reduced to a length and a
-/// short stable fingerprint.
+/// Redaction for debug logging and saved fixtures. Only structural data and
+/// recognized response-control categories survive; accessibility strings can
+/// contain complete conversations and must never be exported verbatim.
 enum SnapshotRedaction {
-    static func fingerprint(_ text: String) -> String {
-        var hash: UInt64 = 0xcbf2_9ce4_8422_2325
-        for byte in text.utf8 {
-            hash ^= UInt64(byte)
-            hash = hash &* 0x0000_0100_0000_01b3
-        }
-        return String(format: "%08x", UInt32(truncatingIfNeeded: hash))
+    private static let safeResponseControls: Set<String> = [
+        "bad response", "copy", "copy message", "copy response",
+        "edit", "good response", "regenerate", "retry",
+    ]
+
+    private static func responseControlCategory(_ value: String) -> String? {
+        let normalized = value.trimmingCharacters(in: .whitespacesAndNewlines).lowercased()
+        return safeResponseControls.contains(normalized) ? normalized : nil
     }
 
     static func redacted(_ node: SnapshotNode) -> SnapshotNode {
         var copy = node
         if !copy.text.isEmpty {
-            copy.text = "«len=\(copy.text.count),fp=\(fingerprint(copy.text))»"
+            copy.text = "«redacted chars=\(copy.text.count)»"
         }
+        copy.label = responseControlCategory(copy.label) ?? ""
+        copy.identifier = ""
+        copy.actionTitles = Set(copy.actionTitles.compactMap(responseControlCategory)).sorted()
         copy.children = copy.children.map(redacted)
         return copy
     }
@@ -146,8 +150,9 @@ enum SnapshotRedaction {
     }
 
     static func structuralSummary(_ snapshot: TargetSnapshot) -> String {
-        var lines: [String] = ["click=\(Int(snapshot.clickPoint.x)),\(Int(snapshot.clickPoint.y)) hit=\(snapshot.hitNodeID)"]
-        summarize(snapshot.root, depth: 0, into: &lines)
+        let safeSnapshot = redacted(snapshot)
+        var lines: [String] = ["click=\(Int(safeSnapshot.clickPoint.x)),\(Int(safeSnapshot.clickPoint.y)) hit=\(safeSnapshot.hitNodeID)"]
+        summarize(safeSnapshot.root, depth: 0, into: &lines)
         return lines.joined(separator: "\n")
     }
 
@@ -155,7 +160,8 @@ enum SnapshotRedaction {
         let indent = String(repeating: "  ", count: depth)
         var parts = ["id=\(node.id)", "role=\(node.role)"]
         if !node.identifier.isEmpty { parts.append("identifier=\(node.identifier)") }
-        if !node.text.isEmpty { parts.append("chars=\(node.text.count) fp=\(fingerprint(node.text))") }
+        if !node.label.isEmpty { parts.append("control=\(node.label)") }
+        if !node.text.isEmpty { parts.append(node.text) }
         if let frame = node.frame {
             parts.append("frame=\(Int(frame.minX)),\(Int(frame.minY)) \(Int(frame.width))x\(Int(frame.height))")
         }

@@ -8,6 +8,7 @@
 
 /* Begin PBXBuildFile section */
 		050C4112F9C38309BCD50330 /* ResponseHeuristics.swift in Sources */ = {isa = PBXBuildFile; fileRef = 4E463BFD81A003A0C3783B23 /* ResponseHeuristics.swift */; };
+		183B0ACAA89F32E4214FC091 /* Main.swift in Sources */ = {isa = PBXBuildFile; fileRef = 1AA12B9D2494974B8A56871F /* Main.swift */; };
 		2E91A1E391CDC0138BD23170 /* AccessibilityClient.swift in Sources */ = {isa = PBXBuildFile; fileRef = A0994C4118909E20D3E3BECB /* AccessibilityClient.swift */; };
 		2EB51CE98C265C6C0A21C8C4 /* ApplicationMenu.swift in Sources */ = {isa = PBXBuildFile; fileRef = C2544342DD3B68E5AD194ADD /* ApplicationMenu.swift */; };
 		32D85A96533AF452D58B7AD1 /* TargetClassifierTests.swift in Sources */ = {isa = PBXBuildFile; fileRef = D0FB5E2D40F77EAFFA339571 /* TargetClassifierTests.swift */; };
@@ -19,17 +20,27 @@
 		7A6623BE77EEDCE3EF0D204C /* TargetClassifier.swift in Sources */ = {isa = PBXBuildFile; fileRef = 0533521A6EA372A8E051ED38 /* TargetClassifier.swift */; };
 		82560EF189E8E3D96385EEDB /* ResponseSelectionTests.swift in Sources */ = {isa = PBXBuildFile; fileRef = B7EF185BC824B6767E40B2CB /* ResponseSelectionTests.swift */; };
 		84BBDD93CB27FC0B2FF056E4 /* ResponseBinding.swift in Sources */ = {isa = PBXBuildFile; fileRef = BE2A8B53C501D8BD0B79DE63 /* ResponseBinding.swift */; };
+		8A38BE644E070AF697B56D32 /* ResponseBindingTests.swift in Sources */ = {isa = PBXBuildFile; fileRef = 256572C919464B6DBD9081E5 /* ResponseBindingTests.swift */; };
 		8C06C4682473C86FE9BB99A6 /* SourceHighlightController.swift in Sources */ = {isa = PBXBuildFile; fileRef = 68078D74B8A5799FE5744438 /* SourceHighlightController.swift */; };
 		A5269A5B9FD1F23E66918576 /* EditorBindingTests.swift in Sources */ = {isa = PBXBuildFile; fileRef = 10C0903B2A61AD5E4D59FC3A /* EditorBindingTests.swift */; };
 		ABC2BC2F39FB9DC5EE0ECC9D /* ResponseHeuristicsTests.swift in Sources */ = {isa = PBXBuildFile; fileRef = 9261278723D67066974951C4 /* ResponseHeuristicsTests.swift */; };
 		AFFA4FC149B1F874B422C3C2 /* EditorBinding.swift in Sources */ = {isa = PBXBuildFile; fileRef = 363F5047BB64E31A1B933CAB /* EditorBinding.swift */; };
+		B791301175A9C862D7872EDE /* AccessibilitySnapshotTests.swift in Sources */ = {isa = PBXBuildFile; fileRef = 00B3AF710021EE6FA780C087 /* AccessibilitySnapshotTests.swift */; };
 		CEFAF89BE87589537683792C /* SupportedApplicationTests.swift in Sources */ = {isa = PBXBuildFile; fileRef = A95AF1A2A89164A44BD8BEF6 /* SupportedApplicationTests.swift */; };
 		DFACB8FDAFF8C16A2CB3A411 /* ReaderPanelControllerTests.swift in Sources */ = {isa = PBXBuildFile; fileRef = 138ABC9B85A26BF0D010369C /* ReaderPanelControllerTests.swift */; };
 		E6F1AC3C3EEE1974DD239A02 /* AccessibilitySnapshot.swift in Sources */ = {isa = PBXBuildFile; fileRef = 7ED24E299A2EFED2CEAC5D22 /* AccessibilitySnapshot.swift */; };
 		F0AE9D8380738B18D9195CFD /* OutputLensMain.swift in Sources */ = {isa = PBXBuildFile; fileRef = BCDD238B5F68A8F3E22B06B3 /* OutputLensMain.swift */; };
+		F4258721A5E21B7EE3F6A896 /* AccessibilityIntegrationTests.swift in Sources */ = {isa = PBXBuildFile; fileRef = 631F629B96949A063C675820 /* AccessibilityIntegrationTests.swift */; };
 /* End PBXBuildFile section */
 
 /* Begin PBXContainerItemProxy section */
+		25572B4B353935082627EB9C /* PBXContainerItemProxy */ = {
+			isa = PBXContainerItemProxy;
+			containerPortal = 763457564A100D2452C80761 /* Project object */;
+			proxyType = 1;
+			remoteGlobalIDString = 189FED4B8BD9E7C8808AB580;
+			remoteInfo = MagiIntegrationHost;
+		};
 		A643E8A9489D61E300D6B256 /* PBXContainerItemProxy */ = {
 			isa = PBXContainerItemProxy;
 			containerPortal = 763457564A100D2452C80761 /* Project object */;
@@ -40,20 +51,26 @@
 /* End PBXContainerItemProxy section */
 
 /* Begin PBXFileReference section */
+		00B3AF710021EE6FA780C087 /* AccessibilitySnapshotTests.swift */ = {isa = PBXFileReference; lastKnownFileType = sourcecode.swift; path = AccessibilitySnapshotTests.swift; sourceTree = "<group>"; };
 		0533521A6EA372A8E051ED38 /* TargetClassifier.swift */ = {isa = PBXFileReference; lastKnownFileType = sourcecode.swift; path = TargetClassifier.swift; sourceTree = "<group>"; };
 		10C0903B2A61AD5E4D59FC3A /* EditorBindingTests.swift */ = {isa = PBXFileReference; lastKnownFileType = sourcecode.swift; path = EditorBindingTests.swift; sourceTree = "<group>"; };
 		138ABC9B85A26BF0D010369C /* ReaderPanelControllerTests.swift */ = {isa = PBXFileReference; lastKnownFileType = sourcecode.swift; path = ReaderPanelControllerTests.swift; sourceTree = "<group>"; };
 		17692F4C8F1D4B3969571743 /* ResponseSelection.swift */ = {isa = PBXFileReference; lastKnownFileType = sourcecode.swift; path = ResponseSelection.swift; sourceTree = "<group>"; };
+		1AA12B9D2494974B8A56871F /* Main.swift */ = {isa = PBXFileReference; lastKnownFileType = sourcecode.swift; path = Main.swift; sourceTree = "<group>"; };
+		256572C919464B6DBD9081E5 /* ResponseBindingTests.swift */ = {isa = PBXFileReference; lastKnownFileType = sourcecode.swift; path = ResponseBindingTests.swift; sourceTree = "<group>"; };
 		269997A9AC975BCD98ED4884 /* AppController.swift */ = {isa = PBXFileReference; lastKnownFileType = sourcecode.swift; path = AppController.swift; sourceTree = "<group>"; };
 		360B03F31401DDA4C6204275 /* SupportedApplication.swift */ = {isa = PBXFileReference; lastKnownFileType = sourcecode.swift; path = SupportedApplication.swift; sourceTree = "<group>"; };
 		363F5047BB64E31A1B933CAB /* EditorBinding.swift */ = {isa = PBXFileReference; lastKnownFileType = sourcecode.swift; path = EditorBinding.swift; sourceTree = "<group>"; };
 		36B66AE534E4375B604BE541 /* ApplicationMenuTests.swift */ = {isa = PBXFileReference; lastKnownFileType = sourcecode.swift; path = ApplicationMenuTests.swift; sourceTree = "<group>"; };
 		3E64D34F33129ECD8EF038B9 /* Info.plist */ = {isa = PBXFileReference; lastKnownFileType = text.plist; path = Info.plist; sourceTree = "<group>"; };
 		4E463BFD81A003A0C3783B23 /* ResponseHeuristics.swift */ = {isa = PBXFileReference; lastKnownFileType = sourcecode.swift; path = ResponseHeuristics.swift; sourceTree = "<group>"; };
+		631F629B96949A063C675820 /* AccessibilityIntegrationTests.swift */ = {isa = PBXFileReference; lastKnownFileType = sourcecode.swift; path = AccessibilityIntegrationTests.swift; sourceTree = "<group>"; };
 		68078D74B8A5799FE5744438 /* SourceHighlightController.swift */ = {isa = PBXFileReference; lastKnownFileType = sourcecode.swift; path = SourceHighlightController.swift; sourceTree = "<group>"; };
 		769070D4DE17332700B05858 /* OutputLens.app */ = {isa = PBXFileReference; explicitFileType = wrapper.application; includeInIndex = 0; path = OutputLens.app; sourceTree = BUILT_PRODUCTS_DIR; };
+		7B4ECEB5ED3B2E29183D8331 /* Info.plist */ = {isa = PBXFileReference; lastKnownFileType = text.plist; path = Info.plist; sourceTree = "<group>"; };
 		7ED24E299A2EFED2CEAC5D22 /* AccessibilitySnapshot.swift */ = {isa = PBXFileReference; lastKnownFileType = sourcecode.swift; path = AccessibilitySnapshot.swift; sourceTree = "<group>"; };
 		9261278723D67066974951C4 /* ResponseHeuristicsTests.swift */ = {isa = PBXFileReference; lastKnownFileType = sourcecode.swift; path = ResponseHeuristicsTests.swift; sourceTree = "<group>"; };
+		9D54F60AFD875A88F7659402 /* MagiIntegrationHost.app */ = {isa = PBXFileReference; explicitFileType = wrapper.application; includeInIndex = 0; path = MagiIntegrationHost.app; sourceTree = BUILT_PRODUCTS_DIR; };
 		A0994C4118909E20D3E3BECB /* AccessibilityClient.swift */ = {isa = PBXFileReference; lastKnownFileType = sourcecode.swift; path = AccessibilityClient.swift; sourceTree = "<group>"; };
 		A844EB8EA0FE5B1C251AE71D /* OutputLensTests.xctest */ = {isa = PBXFileReference; explicitFileType = wrapper.cfbundle; includeInIndex = 0; path = OutputLensTests.xctest; sourceTree = BUILT_PRODUCTS_DIR; };
 		A95AF1A2A89164A44BD8BEF6 /* SupportedApplicationTests.swift */ = {isa = PBXFileReference; lastKnownFileType = sourcecode.swift; path = SupportedApplicationTests.swift; sourceTree = "<group>"; };
@@ -90,6 +107,7 @@
 		021A2B08443FBC5F4A77D5DF = {
 			isa = PBXGroup;
 			children = (
+				C60674DA31D832D0FF3E3FCC /* IntegrationHost */,
 				008E6BEE951341DB967E00A1 /* OutputLens */,
 				F940B0194C3510A214D05D26 /* OutputLensTests */,
 				8784031200634CAF6427DDA1 /* Products */,
@@ -99,18 +117,31 @@
 		8784031200634CAF6427DDA1 /* Products */ = {
 			isa = PBXGroup;
 			children = (
+				9D54F60AFD875A88F7659402 /* MagiIntegrationHost.app */,
 				769070D4DE17332700B05858 /* OutputLens.app */,
 				A844EB8EA0FE5B1C251AE71D /* OutputLensTests.xctest */,
 			);
 			name = Products;
 			sourceTree = "<group>";
 		};
+		C60674DA31D832D0FF3E3FCC /* IntegrationHost */ = {
+			isa = PBXGroup;
+			children = (
+				7B4ECEB5ED3B2E29183D8331 /* Info.plist */,
+				1AA12B9D2494974B8A56871F /* Main.swift */,
+			);
+			path = IntegrationHost;
+			sourceTree = "<group>";
+		};
 		F940B0194C3510A214D05D26 /* OutputLensTests */ = {
 			isa = PBXGroup;
 			children = (
+				631F629B96949A063C675820 /* AccessibilityIntegrationTests.swift */,
+				00B3AF710021EE6FA780C087 /* AccessibilitySnapshotTests.swift */,
 				36B66AE534E4375B604BE541 /* ApplicationMenuTests.swift */,
 				10C0903B2A61AD5E4D59FC3A /* EditorBindingTests.swift */,
 				138ABC9B85A26BF0D010369C /* ReaderPanelControllerTests.swift */,
+				256572C919464B6DBD9081E5 /* ResponseBindingTests.swift */,
 				9261278723D67066974951C4 /* ResponseHeuristicsTests.swift */,
 				B7EF185BC824B6767E40B2CB /* ResponseSelectionTests.swift */,
 				A95AF1A2A89164A44BD8BEF6 /* SupportedApplicationTests.swift */,
@@ -122,6 +153,23 @@
 /* End PBXGroup section */
 
 /* Begin PBXNativeTarget section */
+		189FED4B8BD9E7C8808AB580 /* MagiIntegrationHost */ = {
+			isa = PBXNativeTarget;
+			buildConfigurationList = FEBFAF4278359179765F6D47 /* Build configuration list for PBXNativeTarget "MagiIntegrationHost" */;
+			buildPhases = (
+				AEB78CAFA7E8C897340420B0 /* Sources */,
+			);
+			buildRules = (
+			);
+			dependencies = (
+			);
+			name = MagiIntegrationHost;
+			packageProductDependencies = (
+			);
+			productName = MagiIntegrationHost;
+			productReference = 9D54F60AFD875A88F7659402 /* MagiIntegrationHost.app */;
+			productType = "com.apple.product-type.application";
+		};
 		777D79A45D729669A903E5D1 /* OutputLensTests */ = {
 			isa = PBXNativeTarget;
 			buildConfigurationList = EDFC4696466E68A8B4D9FD01 /* Build configuration list for PBXNativeTarget "OutputLensTests" */;
@@ -132,6 +180,7 @@
 			);
 			dependencies = (
 				1AC7A0B5FB20933EDD454DBE /* PBXTargetDependency */,
+				5223701B9B842E0C89E6F09E /* PBXTargetDependency */,
 			);
 			name = OutputLensTests;
 			packageProductDependencies = (
@@ -182,6 +231,7 @@
 			projectDirPath = "";
 			projectRoot = "";
 			targets = (
+				189FED4B8BD9E7C8808AB580 /* MagiIntegrationHost */,
 				9BE8E2ACE789533D5B1CB87A /* OutputLens */,
 				777D79A45D729669A903E5D1 /* OutputLensTests */,
 			);
@@ -209,13 +259,24 @@
 			);
 			runOnlyForDeploymentPostprocessing = 0;
 		};
+		AEB78CAFA7E8C897340420B0 /* Sources */ = {
+			isa = PBXSourcesBuildPhase;
+			buildActionMask = 2147483647;
+			files = (
+				183B0ACAA89F32E4214FC091 /* Main.swift in Sources */,
+			);
+			runOnlyForDeploymentPostprocessing = 0;
+		};
 		B8B859EC8096F938AFAB2B53 /* Sources */ = {
 			isa = PBXSourcesBuildPhase;
 			buildActionMask = 2147483647;
 			files = (
+				F4258721A5E21B7EE3F6A896 /* AccessibilityIntegrationTests.swift in Sources */,
+				B791301175A9C862D7872EDE /* AccessibilitySnapshotTests.swift in Sources */,
 				5E6B457EF6EAE4ED0932EEF9 /* ApplicationMenuTests.swift in Sources */,
 				A5269A5B9FD1F23E66918576 /* EditorBindingTests.swift in Sources */,
 				DFACB8FDAFF8C16A2CB3A411 /* ReaderPanelControllerTests.swift in Sources */,
+				8A38BE644E070AF697B56D32 /* ResponseBindingTests.swift in Sources */,
 				ABC2BC2F39FB9DC5EE0ECC9D /* ResponseHeuristicsTests.swift in Sources */,
 				82560EF189E8E3D96385EEDB /* ResponseSelectionTests.swift in Sources */,
 				CEFAF89BE87589537683792C /* SupportedApplicationTests.swift in Sources */,
@@ -231,6 +292,11 @@
 			target = 9BE8E2ACE789533D5B1CB87A /* OutputLens */;
 			targetProxy = A643E8A9489D61E300D6B256 /* PBXContainerItemProxy */;
 		};
+		5223701B9B842E0C89E6F09E /* PBXTargetDependency */ = {
+			isa = PBXTargetDependency;
+			target = 189FED4B8BD9E7C8808AB580 /* MagiIntegrationHost */;
+			targetProxy = 25572B4B353935082627EB9C /* PBXContainerItemProxy */;
+		};
 /* End PBXTargetDependency section */
 
 /* Begin XCBuildConfiguration section */
@@ -239,6 +305,7 @@
 			buildSettings = {
 				BUNDLE_LOADER = "$(TEST_HOST)";
 				COMBINE_HIDPI_IMAGES = YES;
+				GENERATE_INFOPLIST_FILE = YES;
 				LD_RUNPATH_SEARCH_PATHS = (
 					"$(inherited)",
 					"@executable_path/../Frameworks",
@@ -255,6 +322,7 @@
 			buildSettings = {
 				BUNDLE_LOADER = "$(TEST_HOST)";
 				COMBINE_HIDPI_IMAGES = YES;
+				GENERATE_INFOPLIST_FILE = YES;
 				LD_RUNPATH_SEARCH_PATHS = (
 					"$(inherited)",
 					"@executable_path/../Frameworks",
@@ -329,6 +397,40 @@
 				SWIFT_VERSION = 6.0;
 			};
 			name = Debug;
+		};
+		8E696B380AFFF891D7D5CC41 /* Debug */ = {
+			isa = XCBuildConfiguration;
+			buildSettings = {
+				ASSETCATALOG_COMPILER_APPICON_NAME = AppIcon;
+				CODE_SIGN_IDENTITY = "-";
+				COMBINE_HIDPI_IMAGES = YES;
+				INFOPLIST_FILE = IntegrationHost/Info.plist;
+				LD_RUNPATH_SEARCH_PATHS = (
+					"$(inherited)",
+					"@executable_path/../Frameworks",
+				);
+				PRODUCT_BUNDLE_IDENTIFIER = com.azizemreayan.MagiIntegrationHost;
+				PRODUCT_NAME = MagiIntegrationHost;
+				SDKROOT = macosx;
+			};
+			name = Debug;
+		};
+		9679DCC02B560E7C1E185F09 /* Release */ = {
+			isa = XCBuildConfiguration;
+			buildSettings = {
+				ASSETCATALOG_COMPILER_APPICON_NAME = AppIcon;
+				CODE_SIGN_IDENTITY = "-";
+				COMBINE_HIDPI_IMAGES = YES;
+				INFOPLIST_FILE = IntegrationHost/Info.plist;
+				LD_RUNPATH_SEARCH_PATHS = (
+					"$(inherited)",
+					"@executable_path/../Frameworks",
+				);
+				PRODUCT_BUNDLE_IDENTIFIER = com.azizemreayan.MagiIntegrationHost;
+				PRODUCT_NAME = MagiIntegrationHost;
+				SDKROOT = macosx;
+			};
+			name = Release;
 		};
 		DB6092519E8B59BC186B2BC3 /* Release */ = {
 			isa = XCBuildConfiguration;
@@ -447,6 +549,15 @@
 			buildConfigurations = (
 				1D074B9EEE4EB053C5D55A4F /* Debug */,
 				446A3D8CE85889451A32B676 /* Release */,
+			);
+			defaultConfigurationIsVisible = 0;
+			defaultConfigurationName = Debug;
+		};
+		FEBFAF4278359179765F6D47 /* Build configuration list for PBXNativeTarget "MagiIntegrationHost" */ = {
+			isa = XCConfigurationList;
+			buildConfigurations = (
+				8E696B380AFFF891D7D5CC41 /* Debug */,
+				9679DCC02B560E7C1E185F09 /* Release */,
 			);
 			defaultConfigurationIsVisible = 0;
 			defaultConfigurationName = Debug;

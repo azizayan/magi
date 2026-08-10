@@ -63,6 +63,15 @@ enum SupportedApplication {
         mixedHostBundleIdentifiers.contains(bundleIdentifier)
     }
 
+    static func allowsUniversalTerminalEditor(
+        bundleIdentifier: String,
+        applicationName: String,
+        focusedElementHasTerminalMarker: Bool
+    ) -> Bool {
+        isTerminal(bundleIdentifier: bundleIdentifier, applicationName: applicationName)
+            || focusedElementHasTerminalMarker
+    }
+
     /// Accessibility elements rendered by terminal helper processes can report
     /// the helper PID rather than the owning GUI app PID. Walk upward until the
     /// first supported application is found.

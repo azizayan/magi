@@ -67,11 +67,13 @@ On activation, Output Lens records:
 - Source application bundle identifier and process.
 - Source window.
 - Accessibility element and ancestor representing the complete response.
-- Screen position and an initial text fingerprint used to recover the element if the app rebuilds its interface during streaming.
+- Screen position, response section index, and a bounded text-prefix identity
+  check used to recover the element if the app rebuilds during streaming. This
+  identity data remains in memory and is never exported in diagnostics.
 
 It then subscribes to macOS Accessibility change notifications for that element. Updates are accepted only when they belong to the same application, window, response container, and text sequence. A normal streaming update should extend or revise the bound response; it must never silently switch to a neighboring response.
 
-If the application destroys and recreates the accessibility element, Output Lens attempts a constrained recovery in the same window near the original location and verifies the text fingerprint. If identity cannot be established confidently, the panel keeps the last confirmed text and shows a small **Connection paused** indicator instead of displaying possibly incorrect content.
+If the application destroys and recreates the accessibility element, Output Lens attempts a constrained recovery in the same window near the original location and verifies the in-memory text sequence. If identity cannot be established confidently, the panel keeps the last confirmed text and shows a small **Connection paused** indicator instead of displaying possibly incorrect content.
 
 ## Technical approach
 
