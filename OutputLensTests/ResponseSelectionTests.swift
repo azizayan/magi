@@ -134,6 +134,21 @@ final class ResponseSelectionTests: XCTestCase {
         XCTAssertEqual(resolution?.text, "First response paragraph\nFirst response continues")
     }
 
+    func testWholeVisualTurnIsClickableRegardlessOfHorizontalPosition() {
+        let root = flatConversation()
+        let expected = "First response paragraph\nFirst response continues"
+        let points = [
+            CGPoint(x: -200, y: 205), // left margin beside the first paragraph
+            CGPoint(x: 900, y: 230),  // right margin and internal whitespace
+            CGPoint(x: -200, y: 275), // action-row/code-padding area near the bottom
+        ]
+
+        for point in points {
+            let fixture = TargetSnapshot(root: root, hitNodeID: Self.overlayHitID, clickPoint: point)
+            XCTAssertEqual(ResponseSelection.resolve(snapshot: fixture, adapter: adapter)?.text, expected)
+        }
+    }
+
     func testRepeatedIdenticalCopyControlsRemainSeparateBoundaries() {
         let root = flatConversation()
         let clusters = ResponseSelection.actionClusters(in: root, markers: adapter.markers)

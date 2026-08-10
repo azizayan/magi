@@ -407,16 +407,28 @@ final class AccessibilityClient {
             current = parent
         }
 
-        // Build from the highest ancestor; if the node budget truncates the
-        // tree before reaching the hit element, retry from a lower root so the
-        // clicked element is always represented.
+        // Build from the highest ancestor. A snapshot that merely contains the
+        // hit is not enough: if its node budget was exhausted after the hit,
+        // the end of a long response may be missing. Narrow progressively
+        // until the clicked subtree is captured completely.
+        var truncatedFallback: (snapshot: TargetSnapshot, elements: [Int: AXUIElement])?
         for root in ancestors.reversed() {
             var builder = SnapshotBuilder(hitElement: hitElement, budget: 3000)
             guard let rootNode = build(root, depth: 0, builder: &builder) else { continue }
             if let hitID = builder.hitID {
-                elementsByNodeID = builder.elements
-                return TargetSnapshot(root: rootNode, hitNodeID: hitID, clickPoint: clickPoint)
+                let snapshot = TargetSnapshot(root: rootNode, hitNodeID: hitID, clickPoint: clickPoint)
+                if !builder.wasTruncated {
+                    elementsByNodeID = builder.elements
+                    return snapshot
+                }
+                if truncatedFallback == nil {
+                    truncatedFallback = (snapshot, builder.elements)
+                }
             }
+        }
+        if let truncatedFallback {
+            elementsByNodeID = truncatedFallback.elements
+            return truncatedFallback.snapshot
         }
         return nil
     }
@@ -433,6 +445,11 @@ final class AccessibilityClient {
         var builder = SnapshotBuilder(hitElement: window, budget: 6000)
         guard let root = build(window, depth: 0, builder: &builder),
               let hitNodeID = root.bestHitNodeID(at: clickPoint) else { return nil }
+        if builder.wasTruncated,
+           let refinedHitElement = builder.elements[hitNodeID],
+           let refinedSnapshot = captureSnapshot(from: refinedHitElement, clickPoint: clickPoint) {
+            return refinedSnapshot
+        }
         elementsByNodeID = builder.elements
         return TargetSnapshot(root: root, hitNodeID: hitNodeID, clickPoint: clickPoint)
     }
@@ -443,10 +460,14 @@ final class AccessibilityClient {
         var nextID = 0
         var elements: [Int: AXUIElement] = [:]
         var hitID: Int?
+        var wasTruncated = false
     }
 
     private func build(_ element: AXUIElement, depth: Int, builder: inout SnapshotBuilder) -> SnapshotNode? {
-        guard depth <= 40, builder.budget > 0 else { return nil }
+        guard depth <= 40, builder.budget > 0 else {
+            builder.wasTruncated = true
+            return nil
+        }
         builder.budget -= 1
 
         let id = builder.nextID
@@ -481,7 +502,10 @@ final class AccessibilityClient {
 
         var childNodes: [SnapshotNode] = []
         for child in children(of: element) {
-            guard builder.budget > 0 else { break }
+            guard builder.budget > 0 else {
+                builder.wasTruncated = true
+                break
+            }
             if let childNode = build(child, depth: depth + 1, builder: &builder) {
                 childNodes.append(childNode)
             }

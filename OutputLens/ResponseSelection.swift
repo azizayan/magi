@@ -209,23 +209,35 @@ enum ResponseSelection {
     ) -> ResponseResolution? {
         guard let turns = messageTurns(container: container, markers: adapter.markers) else { return nil }
 
-        let leaves = realFramedLeaves(in: container)
-        guard !leaves.isEmpty else { return nil }
-
-        let clicked: SnapshotNode
-        if let containing = leaves
-            .filter({ $0.frame?.contains(clickPoint) == true })
-            .min(by: { ($0.frame?.height ?? .greatestFiniteMagnitude) < ($1.frame?.height ?? .greatestFiniteMagnitude) }) {
-            clicked = containing
-        } else if let nearest = leaves.min(by: {
-            abs(($0.frame?.midY ?? 0) - clickPoint.y) < abs(($1.frame?.midY ?? 0) - clickPoint.y)
+        let selectedIndex: Int
+        if let verticallyContaining = turns.firstIndex(where: { turn in
+            guard let frame = turn.frame, frame.height >= realFrameHeight else { return false }
+            return frame.minY...frame.maxY ~= clickPoint.y
         }) {
-            clicked = nearest
+            // Message groups span the complete visual turn. Ignore horizontal
+            // position so margins, indentation, code-block padding, and empty
+            // space within that turn all behave like clicking its text.
+            selectedIndex = verticallyContaining
         } else {
-            return nil
-        }
+            let leaves = realFramedLeaves(in: container)
+            guard !leaves.isEmpty else { return nil }
 
-        guard let selectedIndex = turns.firstIndex(where: { $0.node(withID: clicked.id) != nil }) else { return nil }
+            let clicked: SnapshotNode
+            if let containing = leaves
+                .filter({ $0.frame?.contains(clickPoint) == true })
+                .min(by: { ($0.frame?.height ?? .greatestFiniteMagnitude) < ($1.frame?.height ?? .greatestFiniteMagnitude) }) {
+                clicked = containing
+            } else if let nearest = leaves.min(by: {
+                abs(($0.frame?.midY ?? 0) - clickPoint.y) < abs(($1.frame?.midY ?? 0) - clickPoint.y)
+            }) {
+                clicked = nearest
+            } else {
+                return nil
+            }
+
+            guard let leafTurnIndex = turns.firstIndex(where: { $0.node(withID: clicked.id) != nil }) else { return nil }
+            selectedIndex = leafTurnIndex
+        }
         let fragments = textFragments(in: turns[selectedIndex], markers: adapter.markers)
         let text = ResponseHeuristics.assemble(fragments)
         guard !text.isEmpty else { return nil }
