@@ -63,6 +63,13 @@ enum SupportedApplication {
         mixedHostBundleIdentifiers.contains(bundleIdentifier)
     }
 
+    /// Direct desktop input editing is limited to the two chat applications.
+    /// Mixed IDE hosts such as Cursor are supported only at a positively
+    /// identified terminal surface.
+    static func allowsDirectEditor(bundleIdentifier: String) -> Bool {
+        desktopBundleIdentifiers.contains(bundleIdentifier)
+    }
+
     static func allowsUniversalTerminalEditor(
         bundleIdentifier: String,
         applicationName: String,

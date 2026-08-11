@@ -193,7 +193,7 @@ final class AccessibilityClient {
                 prefersFocusedElement: false
             ))
         case .editableInput(let nodeID):
-            guard !SupportedApplication.isMixedHost(bundleIdentifier: bundleIdentifier) else {
+            guard SupportedApplication.allowsDirectEditor(bundleIdentifier: bundleIdentifier) else {
                 throw AccessibilityClientError.noReadableResponse
             }
             return .editor(try editorSource(

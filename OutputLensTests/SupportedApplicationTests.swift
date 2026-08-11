@@ -46,6 +46,23 @@ final class SupportedApplicationTests: XCTestCase {
         ))
     }
 
+    func testCursorSupportsTerminalSurfacesButNotDirectEditorInputs() {
+        let bundleIdentifier = "com.todesktop.230313mzl4w4u92"
+
+        XCTAssertTrue(SupportedApplication.isMixedHost(bundleIdentifier: bundleIdentifier))
+        XCTAssertFalse(SupportedApplication.allowsDirectEditor(bundleIdentifier: bundleIdentifier))
+        XCTAssertTrue(SupportedApplication.allowsUniversalTerminalEditor(
+            bundleIdentifier: bundleIdentifier,
+            applicationName: "Cursor",
+            focusedElementHasTerminalMarker: true
+        ))
+    }
+
+    func testCodexAndClaudeAllowDirectEditorInputs() {
+        XCTAssertTrue(SupportedApplication.allowsDirectEditor(bundleIdentifier: "com.openai.codex"))
+        XCTAssertTrue(SupportedApplication.allowsDirectEditor(bundleIdentifier: "com.anthropic.claudefordesktop"))
+    }
+
     func testUniversalEditorRejectsUnmarkedNonTerminalApps() {
         XCTAssertFalse(SupportedApplication.allowsUniversalTerminalEditor(
             bundleIdentifier: "com.apple.Safari",
