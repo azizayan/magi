@@ -58,6 +58,17 @@ enum TargetClassifier {
         return node.isValueSettable && !neverEditableRoles.contains(node.role)
     }
 
+    static func focusedEditableContainsClick(
+        role: String,
+        isValueSettable: Bool,
+        frame: CGRect?,
+        point: CGPoint
+    ) -> Bool {
+        editableRoles.contains(role)
+            && isValueSettable
+            && frame?.contains(point) == true
+    }
+
     static func isTerminalSurface(
         _ node: SnapshotNode,
         recognizesUnlabeledTerminalSurface: Bool = false

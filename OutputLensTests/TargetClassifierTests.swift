@@ -47,6 +47,29 @@ final class TargetClassifierTests: XCTestCase {
         XCTAssertEqual(TargetClassifier.classify(snapshot), .editableInput(nodeID: 2))
     }
 
+    func testFocusedEditableFallbackRequiresClickInsideItsOwnFrame() {
+        let frame = CGRect(x: 200, y: 900, width: 600, height: 120)
+
+        XCTAssertTrue(TargetClassifier.focusedEditableContainsClick(
+            role: "AXTextArea",
+            isValueSettable: true,
+            frame: frame,
+            point: CGPoint(x: 450, y: 980)
+        ))
+        XCTAssertFalse(TargetClassifier.focusedEditableContainsClick(
+            role: "AXTextArea",
+            isValueSettable: true,
+            frame: frame,
+            point: CGPoint(x: 450, y: 500)
+        ))
+        XCTAssertFalse(TargetClassifier.focusedEditableContainsClick(
+            role: "AXStaticText",
+            isValueSettable: true,
+            frame: frame,
+            point: CGPoint(x: 450, y: 980)
+        ))
+    }
+
     func testVSCodeIntegratedTerminalIsClassifiedAsTerminalInput() {
         let root = SnapshotNode(id: 1, role: "AXGroup", children: [
             SnapshotNode(

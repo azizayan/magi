@@ -138,6 +138,25 @@ final class AccessibilityClient {
             ))
         }
 
+        // Claude's Electron surface can return a full-size overlay/group from
+        // coordinate hit-testing even after the underlying composer receives
+        // focus. Accept the focused editable element only when its own frame
+        // contains this click, so a previously focused composer cannot turn a
+        // response click into Editor mode.
+        if SupportedApplication.desktopBundleIdentifiers.contains(bundleIdentifier),
+           let editableElement = focusedEditableElement(
+               applicationPID: pid,
+               containing: point
+           ) {
+            logger.notice("Resolved focused editable fallback bundle=\(bundleIdentifier, privacy: .public)")
+            return .editor(try editorSource(
+                element: editableElement,
+                applicationPID: pid,
+                bundleIdentifier: bundleIdentifier,
+                applicationName: applicationName
+            ))
+        }
+
         guard var snapshot = captureSnapshot(from: resolvedHitElement, clickPoint: point) else {
             throw AccessibilityClientError.noReadableResponse
         }
@@ -560,6 +579,25 @@ final class AccessibilityClient {
             current = copyAttribute(element, kAXParentAttribute as CFString)
         }
         return nil
+    }
+
+    private func focusedEditableElement(
+        applicationPID: pid_t,
+        containing point: CGPoint
+    ) -> AXUIElement? {
+        let application = AXUIElementCreateApplication(applicationPID)
+        guard let element: AXUIElement = copyAttribute(
+            application,
+            kAXFocusedUIElementAttribute as CFString
+        ) else { return nil }
+        let role: String = copyAttribute(element, kAXRoleAttribute as CFString) ?? ""
+        guard TargetClassifier.focusedEditableContainsClick(
+            role: role,
+            isValueSettable: isValueSettable(element),
+            frame: frame(of: element),
+            point: point
+        ) else { return nil }
+        return element
     }
 
     private func children(of element: AXUIElement) -> [AXUIElement] {
