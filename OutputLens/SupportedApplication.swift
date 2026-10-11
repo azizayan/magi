@@ -9,8 +9,14 @@ struct ApplicationIdentity: Equatable {
 enum SupportedApplication {
     static let desktopBundleIdentifiers: Set<String> = [
         "com.openai.codex",
+        "com.openai.chat",
         "com.anthropic.claudefordesktop",
+        "com.electron.ollama",
     ]
+
+    static let responseReaderBundleIdentifiers: Set<String> = desktopBundleIdentifiers.union([
+        "com.todesktop.230313mzl4w4u92", // Cursor Agents
+    ])
 
     static let terminalBundleIdentifiers: Set<String> = [
         "com.apple.Terminal",
@@ -68,6 +74,10 @@ enum SupportedApplication {
     /// identified terminal surface.
     static func allowsDirectEditor(bundleIdentifier: String) -> Bool {
         desktopBundleIdentifiers.contains(bundleIdentifier)
+    }
+
+    static func allowsResponseReader(bundleIdentifier: String) -> Bool {
+        responseReaderBundleIdentifiers.contains(bundleIdentifier)
     }
 
     static func allowsUniversalTerminalEditor(

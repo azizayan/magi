@@ -5,6 +5,50 @@ import XCTest
 /// two tree shapes seen in Codex and Claude: per-message containers, and a
 /// flat conversation whose messages and action rows are all siblings.
 final class ResponseSelectionTests: XCTestCase {
+    func testCursorSelectsWholeResponseValueWithoutActionControls() {
+        let responseText = "Whole Cursor response\nwith multiple sections\nand code"
+        let root = SnapshotNode(id: 1, role: "AXGroup", children: [
+            SnapshotNode(id: 2, role: "AXStaticText", text: "User prompt"),
+            SnapshotNode(id: 3, role: "AXGroup", label: responseText, children: [
+                SnapshotNode(id: 4, role: "AXStaticText", text: "Whole Cursor response"),
+                SnapshotNode(id: 5, role: "AXGroup", text: "code", children: [
+                    SnapshotNode(id: 6, role: "AXStaticText", text: "code"),
+                ]),
+            ]),
+        ])
+        let snapshot = TargetSnapshot(root: root, hitNodeID: 6, clickPoint: .zero)
+
+        let resolution = ResponseSelection.resolve(snapshot: snapshot, adapter: CursorResponseAdapter())
+
+        XCTAssertEqual(resolution?.text, responseText)
+        XCTAssertEqual(resolution?.containerID, 3)
+        XCTAssertEqual(resolution?.adapterName, "cursor")
+    }
+
+    func testCursorDoesNotTreatUserPromptAsResponse() {
+        let root = SnapshotNode(id: 1, role: "AXGroup", children: [
+            SnapshotNode(id: 2, role: "AXStaticText", text: "User prompt"),
+            SnapshotNode(id: 3, role: "AXGroup", text: "Assistant response"),
+        ])
+        let snapshot = TargetSnapshot(root: root, hitNodeID: 2, clickPoint: .zero)
+
+        XCTAssertNil(ResponseSelection.resolve(snapshot: snapshot, adapter: CursorResponseAdapter()))
+    }
+
+    func testCursorRefreshFollowsGrowthOfBoundResponse() {
+        let root = SnapshotNode(id: 3, role: "AXGroup", label: "Streaming response continued")
+        let snapshot = TargetSnapshot(root: root, hitNodeID: 3, clickPoint: .zero)
+
+        let resolution = ResponseSelection.refresh(
+            containerSnapshot: snapshot,
+            adapter: CursorResponseAdapter(),
+            sectionIndex: 0,
+            previousText: "Streaming response"
+        )
+
+        XCTAssertEqual(resolution?.text, "Streaming response continued")
+    }
+
     private let adapter = CodexResponseAdapter()
 
     // MARK: - Fixture builders
@@ -117,7 +161,73 @@ final class ResponseSelectionTests: XCTestCase {
         )
     }
 
+    private func multiActionConversation(collapsedControls: Bool = false) -> SnapshotNode {
+        func message(id: Int, _ first: String, _ second: String, y: CGFloat) -> SnapshotNode {
+            let controlY = collapsedControls ? 80 : y + 120
+            var row = actionRow(id: id + 10, buttonIDs: [id + 11, id + 12], y: controlY)
+            row.children[1].label = "Good response"
+            row.children[1].actionTitles = ["Good response"]
+            return SnapshotNode(id: id, role: "AXGroup",
+                                frame: CGRect(x: 20, y: y, width: 600, height: 150), children: [
+                paragraph(id: id + 1, first, y: y, height: 16),
+                paragraph(id: id + 2, second, y: y + 50, height: 40),
+                row,
+            ])
+        }
+        let messages = SnapshotNode(id: 5, role: "AXGroup", children: [
+            message(id: 100, "Earlier answer", "Earlier answer continues", y: 100),
+            paragraph(id: 200, "Run Magi", y: 280),
+            message(id: 300, "Magi is running.", "I built it and launched the application.", y: 350),
+        ])
+        return SnapshotNode(id: 1, role: "AXGroup",
+                            frame: CGRect(x: 0, y: 80, width: 640, height: 520), children: [
+            messages,
+            SnapshotNode(id: Self.overlayHitID, role: "AXGroup",
+                         frame: CGRect(x: 0, y: 80, width: 640, height: 520)),
+        ])
+    }
+
     // MARK: - Boundary selection
+
+    func testMultipleActionsDoNotSplitResponseAtParagraphs() {
+        let root = multiActionConversation()
+        let clicks: [(Int, CGFloat)] = [
+            (Self.overlayHitID, 355), (Self.overlayHitID, 410), (301, 355), (302, 410),
+        ]
+        for (hitNodeID, clickY) in clicks {
+            let fixture = snapshot(root: root, hitNodeID: hitNodeID, clickY: clickY)
+            let resolution = ResponseSelection.resolve(snapshot: fixture, adapter: adapter)
+
+            XCTAssertEqual(resolution?.text, "Magi is running.\nI built it and launched the application.")
+            XCTAssertEqual(resolution?.promptContext, "Run Magi")
+            XCTAssertFalse(resolution?.text.contains("Earlier answer") ?? true)
+        }
+    }
+
+    func testCollapsedMultiActionRowsKeepResponseWhole() {
+        let fixture = snapshot(root: multiActionConversation(collapsedControls: true),
+                               hitNodeID: Self.overlayHitID, clickY: 410)
+
+        XCTAssertEqual(ResponseSelection.resolve(snapshot: fixture, adapter: adapter)?.text,
+                       "Magi is running.\nI built it and launched the application.")
+    }
+
+    func testMultiActionResponseRefreshKeepsAllParagraphs() throws {
+        var root = multiActionConversation()
+        let fixture = snapshot(root: root, hitNodeID: Self.overlayHitID, clickY: 355)
+        let selected = try XCTUnwrap(ResponseSelection.resolve(snapshot: fixture, adapter: adapter))
+        root.children[0].children[2].children.insert(
+            paragraph(id: 303, "The answer continues streaming.", y: 450), at: 2
+        )
+
+        let refreshed = ResponseSelection.refresh(
+            containerSnapshot: TargetSnapshot(root: root, hitNodeID: root.id, clickPoint: .zero),
+            adapter: adapter, sectionIndex: selected.sectionIndex, previousText: selected.text
+        )
+
+        XCTAssertEqual(refreshed?.text,
+                       "Magi is running.\nI built it and launched the application.\nThe answer continues streaming.")
+    }
 
     func testLatestResponseExcludesEarlierChatHistory() {
         let fixture = snapshot(root: flatConversation(), hitNodeID: Self.overlayHitID, clickY: 345)
@@ -249,14 +359,15 @@ final class ResponseSelectionTests: XCTestCase {
         XCTAssertFalse(resolution?.text.contains("User asked") ?? true)
     }
 
-    func testPerMessageContainerIsUsedDirectly() {
+    func testPerMessageTextHitUsesParentBoundaryToKeepParagraphsTogether() {
         let message = SnapshotNode(
             id: 50,
             role: "AXGroup",
-            frame: CGRect(x: 0, y: 300, width: 640, height: 120),
+            frame: CGRect(x: 0, y: 300, width: 640, height: 200),
             children: [
                 paragraph(id: 51, "Contained response", y: 310),
-                actionRow(id: 52, buttonIDs: [53], y: 390),
+                paragraph(id: 54, "Another paragraph after a large gap", y: 410),
+                actionRow(id: 52, buttonIDs: [53], y: 460),
             ]
         )
         let root = SnapshotNode(
@@ -271,8 +382,9 @@ final class ResponseSelectionTests: XCTestCase {
         let fixture = snapshot(root: root, hitNodeID: 51, clickY: 320)
         let resolution = ResponseSelection.resolve(snapshot: fixture, adapter: adapter)
 
-        XCTAssertEqual(resolution?.containerID, 50)
-        XCTAssertEqual(resolution?.text, "Contained response")
+        XCTAssertEqual(resolution?.containerID, 1)
+        XCTAssertEqual(resolution?.sectionIndex, 1)
+        XCTAssertEqual(resolution?.text, "Contained response\nAnother paragraph after a large gap")
     }
 
     func testResponseWithListsAndCodeBlocksStaysComplete() {

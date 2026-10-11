@@ -1,5 +1,9 @@
 # Publishing Magi
 
+The first public release is a source-only, Codex Desktop alpha. Users build
+locally with Xcode and XcodeGen; Apple Developer membership, Developer ID
+signing, and notarization are not required for that source build.
+
 Public source distribution is allowed now. A public macOS binary is allowed
 only after Developer ID signing and Apple notarization succeed. The local
 ad-hoc artifact is deliberately named `Magi-macos-UNNOTARIZED.zip` and must
@@ -32,8 +36,10 @@ also run:
 ./scripts/test-macos-integration.sh
 ```
 
-Complete and record [COMPATIBILITY.md](COMPATIBILITY.md) against the release
-candidate.
+Record [COMPATIBILITY.md](COMPATIBILITY.md) against the release candidate.
+For source-only alphas, clearly disclose any pending live checks in the release
+notes. Complete the Codex Reader checks before claiming stable Codex support;
+other integrations remain experimental until their own rows pass.
 
 ## Source-only release (no Apple Developer account)
 

@@ -28,6 +28,11 @@ struct ResponseControlMarkers {
 protocol ResponseAdapter {
     var name: String { get }
     var markers: ResponseControlMarkers { get }
+    var usesHitPathValueContainer: Bool { get }
+}
+
+extension ResponseAdapter {
+    var usesHitPathValueContainer: Bool { false }
 }
 
 struct CodexResponseAdapter: ResponseAdapter {
@@ -50,6 +55,12 @@ struct ClaudeResponseAdapter: ResponseAdapter {
         ],
         excludedMarkers: ["copy code", "copy link", "copy path", "copy command"]
     )
+}
+
+struct CursorResponseAdapter: ResponseAdapter {
+    let name = "cursor"
+    let markers = ResponseControlMarkers(boundaryMarkers: [], excludedMarkers: [])
+    let usesHitPathValueContainer = true
 }
 
 /// A row of message-action controls found in the tree. Each cluster is
@@ -97,6 +108,10 @@ enum ResponseSelection {
         let path = snapshot.hitPath
         guard !path.isEmpty else { return nil }
 
+        if adapter.usesHitPathValueContainer {
+            return hitPathValueResolution(path: path, adapter: adapter)
+        }
+
         guard let container = selectContainer(path: path, markers: adapter.markers) else { return nil }
         let clusters = actionClusters(in: container, markers: adapter.markers)
         guard !clusters.isEmpty else { return nil }
@@ -107,8 +122,12 @@ enum ResponseSelection {
         // (zero-height, mis-positioned) frames — so geometry alone fails. But
         // the tree still groups each turn under a message-list node, so we map
         // the click to its real-framed leaf and take the owning turn.
-        if let structural = structuralResolution(container: container, adapter: adapter, clickPoint: snapshot.clickPoint) {
-            return structural
+        // A text hit can start inside the message itself. Its parent carries
+        // the turn boundary, so include that ancestor before using spacing.
+        for ancestor in path.reversed().drop(while: { $0.id != container.id }) {
+            if let structural = structuralResolution(container: ancestor, adapter: adapter, clickPoint: snapshot.clickPoint) {
+                return structural
+            }
         }
 
         // Fallback for trees without per-message controls: geometry segments.
@@ -144,6 +163,19 @@ enum ResponseSelection {
         previousText: String
     ) -> ResponseResolution? {
         let container = containerSnapshot.root
+        if adapter.usesHitPathValueContainer {
+            let text = hitPathContainerText(container)
+            guard ResponseHeuristics.isSafeUpdate(previous: previousText, next: text) else { return nil }
+            return ResponseResolution(
+                adapterName: adapter.name,
+                containerID: container.id,
+                sectionIndex: 0,
+                clusterCount: 1,
+                text: text,
+                frame: container.frame,
+                promptContext: nil
+            )
+        }
         let clusters = actionClusters(in: container, markers: adapter.markers)
         guard !clusters.isEmpty else { return nil }
 
@@ -184,6 +216,46 @@ enum ResponseSelection {
             )
         }
         return nil
+    }
+
+    /// Cursor Agents exposes the complete assistant answer as the value of a
+    /// group on the clicked Accessibility path, without a message-action row.
+    /// Pick the largest such group so clicking nested code or formatting still
+    /// resolves to the whole answer. User prompts are leaf text nodes and do
+    /// not satisfy this boundary.
+    private static func hitPathValueResolution(
+        path: [SnapshotNode],
+        adapter: ResponseAdapter
+    ) -> ResponseResolution? {
+        let candidates = path.enumerated().filter { _, node in
+            node.role == "AXGroup"
+                && !hitPathContainerText(node).isEmpty
+                && !node.isValueSettable
+        }
+        guard let selected = candidates.max(by: { first, second in
+            let firstCount = hitPathContainerText(first.element).count
+            let secondCount = hitPathContainerText(second.element).count
+            if firstCount != secondCount { return firstCount < secondCount }
+            return first.offset > second.offset
+        })?.element else { return nil }
+
+        let text = hitPathContainerText(selected)
+        guard !text.isEmpty else { return nil }
+        return ResponseResolution(
+            adapterName: adapter.name,
+            containerID: selected.id,
+            sectionIndex: 0,
+            clusterCount: 1,
+            text: text,
+            frame: selected.frame,
+            promptContext: nil
+        )
+    }
+
+    private static func hitPathContainerText(_ node: SnapshotNode) -> String {
+        let value = ResponseHeuristics.normalize(node.text)
+        if !value.isEmpty { return value }
+        return ResponseHeuristics.normalize(node.label)
     }
 
     private static func precedingSectionText(_ sections: [MessageSection], before index: Int) -> String? {
@@ -257,9 +329,10 @@ enum ResponseSelection {
     }
 
     /// The children of the message-list node — one per conversation turn.
-    /// Derived from the message-action controls: each control's highest
-    /// single-control ancestor is one message; those messages share the
-    /// message-list parent. nil when no such grouping exists.
+    /// Each action row belongs to the first ancestor that also owns readable
+    /// response text. Counting individual buttons splits toolbars with several
+    /// actions, while climbing farther can include prompts or earlier turns.
+    /// nil when those owners do not share a message-list parent.
     static func messageTurns(container: SnapshotNode, markers: ResponseControlMarkers) -> [SnapshotNode]? {
         let parent = parentMap(container)
         var byID: [Int: SnapshotNode] = [:]
@@ -271,29 +344,21 @@ enum ResponseSelection {
         var messageIDs: [Int] = []
         var seen: Set<Int> = []
         for button in controlButtons {
-            var messageID = button.id
             var ancestor = parent[button.id]
-            while let id = ancestor, let node = byID[id], controlButtonCount(node, markers: markers) == 1 {
-                messageID = id
+            while let id = ancestor, let node = byID[id] {
+                if !textFragments(in: node, markers: markers).isEmpty {
+                    if seen.insert(id).inserted { messageIDs.append(id) }
+                    break
+                }
                 ancestor = parent[id]
             }
-            if seen.insert(messageID).inserted { messageIDs.append(messageID) }
         }
 
-        // A flat Chromium tree can place response controls and individual text
-        // fragments directly under the same parent. In that shape the button
-        // itself is not a message turn; treating every sibling as one turn is
-        // what reduced a click to a single sentence.
-        guard messageIDs.allSatisfy({ id in
-            guard let node = byID[id] else { return false }
-            return !isControlButton(node, markers: markers)
-        }) else { return nil }
-
-        var parentCounts: [Int: Int] = [:]
-        for id in messageIDs {
-            if let listID = parent[id] { parentCounts[listID, default: 0] += 1 }
-        }
-        guard let listID = parentCounts.max(by: { $0.value < $1.value })?.key,
+        // A flat tree has no separate message owner. Mixed/nested owners are
+        // also insufficient evidence for treating arbitrary siblings as turns.
+        guard !messageIDs.isEmpty,
+              let listID = messageIDs.first.flatMap({ parent[$0] }),
+              messageIDs.allSatisfy({ parent[$0] == listID }),
               let listNode = byID[listID], listNode.children.count >= 2 else { return nil }
         return listNode.children
     }
@@ -307,14 +372,6 @@ enum ResponseSelection {
             }
         }
         return leaves
-    }
-
-    private static func controlButtonCount(_ node: SnapshotNode, markers: ResponseControlMarkers) -> Int {
-        var count = isControlButton(node, markers: markers) ? 1 : 0
-        for child in node.children {
-            count += controlButtonCount(child, markers: markers)
-        }
-        return count
     }
 
     private static func parentMap(_ root: SnapshotNode) -> [Int: Int] {

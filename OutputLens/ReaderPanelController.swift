@@ -80,9 +80,20 @@ final class ReaderPanelController: NSWindowController, NSWindowDelegate, NSTextV
             }
         }
 
-        stateLabel.stringValue = connectionState == .connected ? "Connected" : "Connection paused"
-        stateLabel.textColor = connectionState == .connected ? .secondaryLabelColor : .systemOrange
-        stateIndicator.textColor = connectionState == .connected ? .systemGreen : .systemOrange
+        switch connectionState {
+        case .connected:
+            stateLabel.stringValue = "Connected"
+            stateLabel.textColor = .secondaryLabelColor
+            stateIndicator.textColor = .systemGreen
+        case .paused:
+            stateLabel.stringValue = "Connection paused"
+            stateLabel.textColor = .systemOrange
+            stateIndicator.textColor = .systemOrange
+        case .captured:
+            stateLabel.stringValue = "Captured output"
+            stateLabel.textColor = .secondaryLabelColor
+            stateIndicator.textColor = .systemBlue
+        }
 
         if let frame = Self.panelFrame(attachedTo: accessibilityFrame) {
             window?.setFrame(frame, display: true, animate: window?.isVisible == true)

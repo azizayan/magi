@@ -15,6 +15,16 @@ final class TargetClassifierTests: XCTestCase {
             charactersIgnoringModifiers: "n",
             modifierFlags: [.option]
         ))
+        XCTAssertTrue(UniversalEditorShortcut.matches(
+            keyCode: UInt16(UniversalEditorShortcut.keyCode),
+            modifierFlags: [.option]
+        ))
+        XCTAssertFalse(UniversalEditorShortcut.matches(
+            keyCode: UInt16(UniversalEditorShortcut.keyCode),
+            modifierFlags: [.option, .shift]
+        ))
+        XCTAssertTrue(UniversalEditorShortcut.matchesMouse(modifierFlags: [.control, .option]))
+        XCTAssertFalse(UniversalEditorShortcut.matchesMouse(modifierFlags: [.option]))
     }
 
     func testEditableRoleTakesPriorityOverReadableText() {

@@ -4,6 +4,7 @@ import ApplicationServices
 enum ConnectionState {
     case connected
     case paused
+    case captured
 }
 
 struct ResponseUpdate {

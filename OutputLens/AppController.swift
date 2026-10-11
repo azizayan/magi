@@ -12,11 +12,14 @@ final class AppController: NSObject {
     private let statusItem = NSStatusBar.system.statusItem(withLength: NSStatusItem.variableLength)
 
     private var eventMonitor: Any?
+    private var keyboardEventMonitor: Any?
     private var universalEditorHotKey: EventHotKeyRef?
     private var universalEditorHotKeyHandler: EventHandlerRef?
     private var binding: ResponseBinding?
     private var editorBinding: EditorBinding?
     private var sourceApplicationPID: pid_t?
+    private var lastExternalApplicationPID: pid_t?
+    private var lastTerminalEditorRequest = Date.distantPast
     private var hasPromptedForAccessibility = false
     private var enabled = true
     private var trigger = Trigger.load()
@@ -38,6 +41,10 @@ final class AppController: NSObject {
         configureStatusItem()
         installEventMonitor()
         installKeyboardMonitor()
+        if let application = NSWorkspace.shared.frontmostApplication,
+           application.processIdentifier != ProcessInfo.processInfo.processIdentifier {
+            lastExternalApplicationPID = application.processIdentifier
+        }
         prepareRunningSourceApplications()
         NSWorkspace.shared.notificationCenter.addObserver(
             self,
@@ -64,8 +71,8 @@ final class AppController: NSObject {
         heading.isEnabled = false
         menu.addItem(heading)
 
-        let universalEditorItem = NSMenuItem(title: "Option-M: Open Editor for Frontmost Terminal", action: nil, keyEquivalent: "")
-        universalEditorItem.isEnabled = false
+        let universalEditorItem = NSMenuItem(title: "Open Terminal Editor (Option-M or Control-Option-click)", action: #selector(openUniversalTerminalEditor), keyEquivalent: "")
+        universalEditorItem.target = self
         menu.addItem(universalEditorItem)
 
         for option in Trigger.allCases {
@@ -120,14 +127,38 @@ final class AppController: NSObject {
     }
 
     private func installKeyboardMonitor() {
+        logger.notice("Keyboard listening access: \(CGPreflightListenEventAccess())")
+        keyboardEventMonitor = NSEvent.addGlobalMonitorForEvents(matching: .keyDown) { [weak self] event in
+            guard UniversalEditorShortcut.matches(
+                keyCode: event.keyCode,
+                modifierFlags: event.modifierFlags
+            ) else { return }
+            MainActor.assumeIsolated {
+                self?.openUniversalTerminalEditor()
+            }
+        }
+
         var eventType = EventTypeSpec(
             eventClass: OSType(kEventClassKeyboard),
             eventKind: UInt32(kEventHotKeyPressed)
         )
-        InstallEventHandler(
+        let handlerStatus = InstallEventHandler(
             GetApplicationEventTarget(),
-            { _, _, userData in
-                guard let userData else { return OSStatus(eventNotHandledErr) }
+            { _, event, userData in
+                guard let event, let userData else { return OSStatus(eventNotHandledErr) }
+                var hotKeyID = EventHotKeyID()
+                guard GetEventParameter(
+                    event,
+                    EventParamName(kEventParamDirectObject),
+                    EventParamType(typeEventHotKeyID),
+                    nil,
+                    MemoryLayout<EventHotKeyID>.size,
+                    nil,
+                    &hotKeyID
+                ) == noErr,
+                hotKeyID.signature == OSType(0x4D41_4749), hotKeyID.id == 1 else {
+                    return OSStatus(eventNotHandledErr)
+                }
                 let controller = Unmanaged<AppController>.fromOpaque(userData).takeUnretainedValue()
                 DispatchQueue.main.async {
                     controller.openUniversalTerminalEditor()
@@ -141,7 +172,7 @@ final class AppController: NSObject {
         )
 
         let hotKeyID = EventHotKeyID(signature: OSType(0x4D41_4749), id: 1) // MAGI
-        RegisterEventHotKey(
+        let shortcutStatus = RegisterEventHotKey(
             UniversalEditorShortcut.keyCode,
             UniversalEditorShortcut.carbonModifiers,
             hotKeyID,
@@ -149,17 +180,32 @@ final class AppController: NSObject {
             0,
             &universalEditorHotKey
         )
+        logger.notice("Terminal editor shortcut registration: handler=\(handlerStatus) shortcut=\(shortcutStatus)")
     }
 
-    private func openUniversalTerminalEditor() {
+    @objc private func openUniversalTerminalEditor() {
+        let now = Date()
+        guard now.timeIntervalSince(lastTerminalEditorRequest) > 0.2 else { return }
+        lastTerminalEditorRequest = now
+
+        let frontmostApplication = NSWorkspace.shared.frontmostApplication
+        let applicationPID = frontmostApplication?.processIdentifier == ProcessInfo.processInfo.processIdentifier
+            ? lastExternalApplicationPID
+            : frontmostApplication?.processIdentifier
+        let bundleIdentifier = applicationPID
+            .flatMap(NSRunningApplication.init(processIdentifier:))?.bundleIdentifier ?? "unknown"
+        let trusted = AXIsProcessTrusted()
+        logger.notice("Terminal editor requested: app=\(bundleIdentifier, privacy: .public) enabled=\(self.enabled) accessibility=\(trusted)")
         guard enabled else { return }
-        guard AXIsProcessTrusted() else {
+        guard trusted else {
             promptForAccessibilityIfNeeded()
             return
         }
 
         do {
-            startEditing(try accessibility.frontmostTerminalEditorSource())
+            let source = try accessibility.frontmostTerminalEditorSource(applicationPID: applicationPID)
+            startEditing(source)
+            logger.notice("Terminal editor opened: app=\(source.bundleIdentifier, privacy: .public)")
         } catch {
             logger.error("Universal terminal editor failed: \(error.localizedDescription, privacy: .public)")
             readerPanel.showMessage("Magi could not open the focused terminal. Click inside the terminal, then press Option-M again.")
@@ -167,7 +213,18 @@ final class AppController: NSObject {
     }
 
     private func handleMouseDown(_ event: NSEvent) {
-        guard enabled, trigger.matches(event.modifierFlags) else { return }
+        guard enabled else { return }
+        if UniversalEditorShortcut.matchesMouse(modifierFlags: event.modifierFlags),
+           let application = NSWorkspace.shared.frontmostApplication,
+           let bundleIdentifier = application.bundleIdentifier,
+           SupportedApplication.isTerminal(
+               bundleIdentifier: bundleIdentifier,
+               applicationName: application.localizedName ?? bundleIdentifier
+           ) {
+            openUniversalTerminalEditor()
+            return
+        }
+        guard trigger.matches(event.modifierFlags) else { return }
         guard AXIsProcessTrusted() else {
             promptForAccessibilityIfNeeded()
             return
@@ -181,6 +238,8 @@ final class AppController: NSObject {
         do {
             switch try accessibility.target(at: point) {
             case .response(let snapshot):
+                startReading(snapshot)
+            case .capturedResponse(let snapshot):
                 startReading(snapshot)
             case .editor(let source):
                 startEditing(source)
@@ -220,6 +279,18 @@ final class AppController: NSObject {
         sourceApplicationPID = snapshot.applicationPID
         sourceHighlight.flash(responseFrame: snapshot.responseFrame, inside: snapshot.windowFrame)
         readerPanel.show(snapshot.text, promptContext: snapshot.promptContext, attachedTo: snapshot.windowFrame, connectionState: .connected)
+    }
+
+    private func startReading(_ snapshot: CapturedResponseSnapshot) {
+        clearBindings()
+        sourceApplicationPID = snapshot.applicationPID
+        sourceHighlight.flash(responseFrame: snapshot.responseFrame, inside: snapshot.windowFrame)
+        readerPanel.show(
+            snapshot.text,
+            promptContext: nil,
+            attachedTo: snapshot.windowFrame,
+            connectionState: .captured
+        )
     }
 
     private func startEditing(_ source: EditorSource) {
@@ -325,6 +396,7 @@ final class AppController: NSObject {
     @objc private func applicationDidActivate(_ notification: Notification) {
         guard let runningApplication = notification.userInfo?[NSWorkspace.applicationUserInfoKey] as? NSRunningApplication else { return }
         guard runningApplication.processIdentifier != ProcessInfo.processInfo.processIdentifier else { return }
+        lastExternalApplicationPID = runningApplication.processIdentifier
         if let bundleIdentifier = runningApplication.bundleIdentifier,
            SupportedApplication.isSupported(
             bundleIdentifier: bundleIdentifier,
@@ -394,5 +466,18 @@ enum UniversalEditorShortcut {
     ) -> Bool {
         let relevant = modifierFlags.intersection([.command, .control, .option, .shift])
         return charactersIgnoringModifiers?.lowercased() == "m" && relevant == [.option]
+    }
+
+    static func matches(
+        keyCode: UInt16,
+        modifierFlags: NSEvent.ModifierFlags
+    ) -> Bool {
+        let relevant = modifierFlags.intersection([.command, .control, .option, .shift])
+        return UInt32(keyCode) == Self.keyCode && relevant == [.option]
+    }
+
+    static func matchesMouse(modifierFlags: NSEvent.ModifierFlags) -> Bool {
+        let relevant = modifierFlags.intersection([.command, .control, .option, .shift])
+        return relevant == [.control, .option]
     }
 }

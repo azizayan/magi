@@ -16,8 +16,16 @@ struct ResponseSnapshot {
     let windowFrame: CGRect
 }
 
+struct CapturedResponseSnapshot {
+    let applicationPID: pid_t
+    let text: String
+    let responseFrame: CGRect
+    let windowFrame: CGRect
+}
+
 enum ResolvedTarget {
     case response(ResponseSnapshot)
+    case capturedResponse(CapturedResponseSnapshot)
     case editor(EditorSource)
 }
 
@@ -47,7 +55,9 @@ enum AccessibilityClientError: LocalizedError {
 final class AccessibilityClient {
     private let chromiumBundleIdentifiers: Set<String> = [
         "com.openai.codex",
+        "com.openai.chat",
         "com.anthropic.claudefordesktop",
+        "com.electron.ollama",
         "com.microsoft.VSCode",
         "com.microsoft.VSCodeInsiders",
         "com.todesktop.230313mzl4w4u92",
@@ -56,6 +66,7 @@ final class AccessibilityClient {
         "com.google.antigravity",
     ]
     private let systemWideElement = AXUIElementCreateSystemWide()
+    private let cliResponseStore = CLIResponseStore()
     private let logger = Logger(subsystem: "com.azizemreayan.OutputLens", category: "TargetSelection")
     private var preparedApplicationPIDs: Set<pid_t> = []
 
@@ -115,12 +126,10 @@ final class AccessibilityClient {
             bundleIdentifier: bundleIdentifier,
             applicationName: applicationName
         ) {
-            return .editor(try terminalEditorSource(
+            return .capturedResponse(try terminalResponseSnapshot(
                 hitElement: resolvedHitElement,
                 applicationPID: pid,
-                bundleIdentifier: bundleIdentifier,
-                applicationName: applicationName,
-                prefersFocusedElement: true
+                clickPoint: point
             ))
         }
 
@@ -185,12 +194,10 @@ final class AccessibilityClient {
             guard let element = elementsByNodeID[nodeID] else {
                 throw AccessibilityClientError.noElement
             }
-            return .editor(try terminalEditorSource(
+            return .capturedResponse(try terminalResponseSnapshot(
                 hitElement: element,
                 applicationPID: pid,
-                bundleIdentifier: bundleIdentifier,
-                applicationName: applicationName,
-                prefersFocusedElement: false
+                clickPoint: point
             ))
         case .editableInput(let nodeID):
             guard SupportedApplication.allowsDirectEditor(bundleIdentifier: bundleIdentifier) else {
@@ -203,7 +210,7 @@ final class AccessibilityClient {
                 applicationName: applicationName
             ))
         case .assistantResponse:
-            guard SupportedApplication.desktopBundleIdentifiers.contains(bundleIdentifier) else {
+            guard SupportedApplication.allowsResponseReader(bundleIdentifier: bundleIdentifier) else {
                 throw AccessibilityClientError.noReadableResponse
             }
             return .response(try responseSnapshot(
@@ -218,8 +225,10 @@ final class AccessibilityClient {
 
     /// Open the safe paste-based editor for a recognized terminal host or a
     /// focused element whose Accessibility ancestry carries a terminal marker.
-    func frontmostTerminalEditorSource() throws -> EditorSource {
-        guard let application = NSWorkspace.shared.frontmostApplication,
+    func frontmostTerminalEditorSource(applicationPID: pid_t? = nil) throws -> EditorSource {
+        let application = applicationPID.flatMap(NSRunningApplication.init(processIdentifier:))
+            ?? NSWorkspace.shared.frontmostApplication
+        guard let application,
               application.processIdentifier != ProcessInfo.processInfo.processIdentifier,
               let bundleIdentifier = application.bundleIdentifier else {
             throw AccessibilityClientError.unsupportedApplication
@@ -257,7 +266,11 @@ final class AccessibilityClient {
     }
 
     private func adapter(for bundleIdentifier: String) -> any ResponseAdapter {
-        bundleIdentifier == "com.anthropic.claudefordesktop" ? ClaudeResponseAdapter() : CodexResponseAdapter()
+        switch bundleIdentifier {
+        case "com.anthropic.claudefordesktop": ClaudeResponseAdapter()
+        case "com.todesktop.230313mzl4w4u92": CursorResponseAdapter()
+        default: CodexResponseAdapter()
+        }
     }
 
     private func applicationIdentity(processIdentifier: pid_t) -> ApplicationIdentity? {
@@ -411,6 +424,119 @@ final class AccessibilityClient {
             windowFrame: windowFrame,
             capability: .pasteRequired,
             originalText: ""
+        )
+    }
+
+    /// Resolve one completed terminal output. Exact Codex/Claude hook records
+    /// win when their text is visible in the clicked terminal; otherwise Magi
+    /// uses the shell prompts surrounding the clicked line as hard boundaries.
+    private func terminalResponseSnapshot(
+        hitElement: AXUIElement,
+        applicationPID: pid_t,
+        clickPoint: CGPoint
+    ) throws -> CapturedResponseSnapshot {
+        let application = AXUIElementCreateApplication(applicationPID)
+        let focusedElement: AXUIElement? = copyAttribute(
+            application,
+            kAXFocusedUIElementAttribute as CFString
+        )
+        let candidates = terminalTextCandidates(hitElement: hitElement, focusedElement: focusedElement)
+        guard let candidate = candidates.max(by: { $0.text.utf16.count < $1.text.utf16.count }) else {
+            throw AccessibilityClientError.noReadableResponse
+        }
+
+        let window: AXUIElement? = copyAttribute(candidate.element, kAXWindowAttribute as CFString)
+            ?? copyAttribute(hitElement, kAXWindowAttribute as CFString)
+            ?? copyAttribute(application, kAXFocusedWindowAttribute as CFString)
+        guard let window, let windowFrame = frame(of: window) else {
+            throw AccessibilityClientError.noWindow
+        }
+
+        let characterIndex = terminalCharacterIndex(
+            at: clickPoint,
+            in: candidate.element,
+            terminalText: candidate.text,
+            hitElement: hitElement
+        )
+        let exactResponse = cliResponseStore.response(
+            matching: candidate.text,
+            characterIndex: characterIndex
+        )?.text
+        guard let response = exactResponse ?? TerminalOutputExtractor.block(
+            in: candidate.text,
+            characterIndex: characterIndex
+        ) else {
+            throw AccessibilityClientError.responseBoundaryNotIdentified
+        }
+
+        return CapturedResponseSnapshot(
+            applicationPID: applicationPID,
+            text: response,
+            responseFrame: frame(of: candidate.element) ?? windowFrame,
+            windowFrame: windowFrame
+        )
+    }
+
+    private func terminalTextCandidates(
+        hitElement: AXUIElement,
+        focusedElement: AXUIElement?
+    ) -> [(element: AXUIElement, text: String)] {
+        var elements: [AXUIElement] = []
+        for start in [hitElement, focusedElement].compactMap({ $0 }) {
+            var current: AXUIElement? = start
+            for _ in 0..<12 {
+                guard let element = current else { break }
+                if !elements.contains(where: { CFEqual($0, element) }) {
+                    elements.append(element)
+                }
+                current = copyAttribute(element, kAXParentAttribute as CFString)
+            }
+        }
+        return elements.compactMap { element in
+            guard let text: String = copyAttribute(element, kAXValueAttribute as CFString),
+                  !text.trimmingCharacters(in: .whitespacesAndNewlines).isEmpty else { return nil }
+            return (element, ResponseHeuristics.normalizeLineEndings(text))
+        }
+    }
+
+    private func characterIndex(at point: CGPoint, in element: AXUIElement) -> Int? {
+        var point = point
+        guard let pointValue = AXValueCreate(.cgPoint, &point) else { return nil }
+        var rangeValue: CFTypeRef?
+        guard AXUIElementCopyParameterizedAttributeValue(
+            element,
+            kAXRangeForPositionParameterizedAttribute as CFString,
+            pointValue,
+            &rangeValue
+        ) == .success,
+        let rangeValue,
+        CFGetTypeID(rangeValue) == AXValueGetTypeID() else { return nil }
+
+        var range = CFRange()
+        guard AXValueGetValue(rangeValue as! AXValue, .cfRange, &range) else { return nil }
+        return range.location >= 0 ? range.location : nil
+    }
+
+    private func terminalCharacterIndex(
+        at point: CGPoint,
+        in terminalElement: AXUIElement,
+        terminalText: String,
+        hitElement: AXUIElement
+    ) -> Int? {
+        if let index = characterIndex(at: point, in: terminalElement) {
+            return index
+        }
+        guard !CFEqual(terminalElement, hitElement),
+              let hitText: String = copyAttribute(hitElement, kAXValueAttribute as CFString) else {
+            return nil
+        }
+        let normalizedHitText = ResponseHeuristics.normalizeLineEndings(hitText)
+            .trimmingCharacters(in: .whitespacesAndNewlines)
+        guard normalizedHitText.count >= 2,
+              let range = terminalText.range(of: normalizedHitText) else { return nil }
+        return terminalText.utf16.distance(
+            from: terminalText.utf16.startIndex,
+            to: range.lowerBound.samePosition(in: terminalText.utf16) ?? terminalText.utf16.startIndex
         )
     }
 

@@ -51,6 +51,7 @@ final class SupportedApplicationTests: XCTestCase {
 
         XCTAssertTrue(SupportedApplication.isMixedHost(bundleIdentifier: bundleIdentifier))
         XCTAssertFalse(SupportedApplication.allowsDirectEditor(bundleIdentifier: bundleIdentifier))
+        XCTAssertTrue(SupportedApplication.allowsResponseReader(bundleIdentifier: bundleIdentifier))
         XCTAssertTrue(SupportedApplication.allowsUniversalTerminalEditor(
             bundleIdentifier: bundleIdentifier,
             applicationName: "Cursor",
@@ -61,6 +62,11 @@ final class SupportedApplicationTests: XCTestCase {
     func testCodexAndClaudeAllowDirectEditorInputs() {
         XCTAssertTrue(SupportedApplication.allowsDirectEditor(bundleIdentifier: "com.openai.codex"))
         XCTAssertTrue(SupportedApplication.allowsDirectEditor(bundleIdentifier: "com.anthropic.claudefordesktop"))
+    }
+
+    func testChatGPTAndOllamaAllowDirectEditorInputs() {
+        XCTAssertTrue(SupportedApplication.allowsDirectEditor(bundleIdentifier: "com.openai.chat"))
+        XCTAssertTrue(SupportedApplication.allowsDirectEditor(bundleIdentifier: "com.electron.ollama"))
     }
 
     func testUniversalEditorRejectsUnmarkedNonTerminalApps() {
