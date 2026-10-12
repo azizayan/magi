@@ -10,7 +10,7 @@ and terminal integrations are experimental and are not part of this alpha's
 support promise. Codex interface changes can affect response capture; please
 report incomplete or incorrect captures through GitHub Issues.
 
-Magi is an independent project and is not affiliated with OpenAI.
+
 
 ## Install Magi on macOS
 
